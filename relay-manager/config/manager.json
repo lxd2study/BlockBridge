@@ -1,0 +1,17 @@
+{
+  "bind": "0.0.0.0:8090",
+  "databasePath": "data/manager.sqlite",
+  "security": {
+    "secret": "change-this-to-a-long-random-secret-before-production",
+    "sessionDays": 7
+  },
+  "initialAdmin": {
+    "username": "admin",
+    "password": "change-this-manager-password",
+    "displayName": "系统管理员"
+  },
+  "metrics": {
+    "sampleIntervalSeconds": 60,
+    "requestTimeoutMillis": 6000
+  }
+}

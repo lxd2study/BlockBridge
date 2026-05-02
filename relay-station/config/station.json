@@ -1,0 +1,21 @@
+{
+  "relay": {
+    "bind": "0.0.0.0",
+    "controlPort": 25566,
+    "publicMin": 25565,
+    "publicMax": 25665,
+    "connectTimeoutMillis": 15000
+  },
+  "api": {
+    "bind": "0.0.0.0:8080",
+    "username": "node-api",
+    "password": "change-this-node-api-password"
+  },
+  "tokens": [
+    {
+      "name": "default",
+      "token": "change-this-long-random-relay-token",
+      "enabled": true
+    }
+  ]
+}

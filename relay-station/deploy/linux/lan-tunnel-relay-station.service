@@ -1,0 +1,17 @@
+[Unit]
+Description=LAN Tunnel Relay Station
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lan-tunnel
+Group=lan-tunnel
+WorkingDirectory=/opt/lan-tunnel-relay-station
+ExecStart=/opt/lan-tunnel-relay-station/relay-station --config /etc/lan-tunnel-relay-station/station.json
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

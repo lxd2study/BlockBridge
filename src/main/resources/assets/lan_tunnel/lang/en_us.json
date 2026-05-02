@@ -1,0 +1,23 @@
+{
+  "lan_tunnel.screen.title": "BlockBridge",
+  "lan_tunnel.screen.enabled": "Enable relay tunnel",
+  "lan_tunnel.screen.auto_start": "Start automatically when Open to LAN is enabled",
+  "lan_tunnel.screen.allow_offline_players": "Allow offline players to join",
+  "lan_tunnel.screen.relay_host": "Relay host",
+  "lan_tunnel.screen.control_port": "Control port",
+  "lan_tunnel.screen.token": "Relay token",
+  "lan_tunnel.screen.public_port": "Public port",
+  "lan_tunnel.screen.reconnect_delay": "Reconnect seconds",
+  "lan_tunnel.screen.section_connection": "Relay settings",
+  "lan_tunnel.screen.section_status": "Tunnel status",
+  "lan_tunnel.screen.start": "Start",
+  "lan_tunnel.screen.stop": "Stop",
+  "lan_tunnel.screen.save": "Save",
+  "lan_tunnel.screen.saved": "Saved.",
+  "lan_tunnel.screen.status": "Status: %s",
+  "lan_tunnel.screen.local_port": "Local: %s",
+  "lan_tunnel.screen.share_address": "Share: %s",
+  "lan_tunnel.status.published": "Published",
+  "lan_tunnel.status.connecting": "Connecting",
+  "lan_tunnel.status.stopped": "Stopped"
+}

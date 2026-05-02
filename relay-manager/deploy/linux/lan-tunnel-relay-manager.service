@@ -1,0 +1,17 @@
+[Unit]
+Description=LAN Tunnel Relay Manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lan-tunnel-manager
+Group=lan-tunnel-manager
+WorkingDirectory=/opt/lan-tunnel-relay-manager
+ExecStart=/usr/bin/node /opt/lan-tunnel-relay-manager/server/index.js --config /etc/lan-tunnel-relay-manager/manager.json
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

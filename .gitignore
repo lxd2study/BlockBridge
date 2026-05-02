@@ -1,0 +1,37 @@
+# eclipse
+bin
+*.launch
+.settings
+.metadata
+.classpath
+.project
+
+# idea
+out
+*.ipr
+*.iws
+*.iml
+.idea
+
+# gradle
+build
+.gradle
+
+# other
+eclipse
+run
+
+# Go relay station
+relay-station/bin
+relay-station/dist
+relay-station/*.exe
+relay-manager/bin
+relay-manager/dist
+relay-manager/*.exe
+relay-manager/node_modules
+relay-manager/public
+relay-manager/data
+relay-manager/client/public
+
+# Files from Forge MDK
+forge*changelog.txt
