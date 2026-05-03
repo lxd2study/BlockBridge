@@ -3,6 +3,7 @@
   "lan_tunnel.screen.enabled": "Enable relay tunnel",
   "lan_tunnel.screen.auto_start": "Start automatically when Open to LAN is enabled",
   "lan_tunnel.screen.allow_offline_players": "Allow offline players to join",
+  "lan_tunnel.screen.show_latency_overlay": "Show relay latency in game",
   "lan_tunnel.screen.relay_host": "Relay host",
   "lan_tunnel.screen.control_port": "Control port",
   "lan_tunnel.screen.token": "Relay token",

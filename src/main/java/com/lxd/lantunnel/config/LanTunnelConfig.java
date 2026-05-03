@@ -17,6 +17,7 @@ public final class LanTunnelConfig {
     private boolean enabled;
     private boolean autoStart;
     private boolean allowOfflinePlayers;
+    private boolean showLatencyOverlay;
     private String relayHost;
     private int relayControlPort;
     private String token;
@@ -36,6 +37,7 @@ public final class LanTunnelConfig {
                 config.enabled = parseBoolean(properties.getProperty("enabled"), config.enabled);
                 config.autoStart = parseBoolean(properties.getProperty("autoStart"), config.autoStart);
                 config.allowOfflinePlayers = parseBoolean(properties.getProperty("allowOfflinePlayers"), config.allowOfflinePlayers);
+                config.showLatencyOverlay = parseBoolean(properties.getProperty("showLatencyOverlay"), config.showLatencyOverlay);
                 config.relayHost = properties.getProperty("relayHost", config.relayHost).trim();
                 config.relayControlPort = parseInt(properties.getProperty("relayControlPort"), config.relayControlPort);
                 config.token = properties.getProperty("token", config.token).trim();
@@ -63,6 +65,7 @@ public final class LanTunnelConfig {
         config.enabled = false;
         config.autoStart = true;
         config.allowOfflinePlayers = false;
+        config.showLatencyOverlay = true;
         config.relayHost = "";
         config.relayControlPort = 25566;
         config.token = "";
@@ -80,6 +83,7 @@ public final class LanTunnelConfig {
         properties.setProperty("enabled", Boolean.toString(enabled));
         properties.setProperty("autoStart", Boolean.toString(autoStart));
         properties.setProperty("allowOfflinePlayers", Boolean.toString(allowOfflinePlayers));
+        properties.setProperty("showLatencyOverlay", Boolean.toString(showLatencyOverlay));
         properties.setProperty("relayHost", relayHost);
         properties.setProperty("relayControlPort", Integer.toString(relayControlPort));
         properties.setProperty("token", token);
@@ -95,6 +99,7 @@ public final class LanTunnelConfig {
         copy.enabled = enabled;
         copy.autoStart = autoStart;
         copy.allowOfflinePlayers = allowOfflinePlayers;
+        copy.showLatencyOverlay = showLatencyOverlay;
         copy.relayHost = relayHost;
         copy.relayControlPort = relayControlPort;
         copy.token = token;
@@ -178,6 +183,14 @@ public final class LanTunnelConfig {
 
     public void setAllowOfflinePlayers(boolean allowOfflinePlayers) {
         this.allowOfflinePlayers = allowOfflinePlayers;
+    }
+
+    public boolean isShowLatencyOverlay() {
+        return showLatencyOverlay;
+    }
+
+    public void setShowLatencyOverlay(boolean showLatencyOverlay) {
+        this.showLatencyOverlay = showLatencyOverlay;
     }
 
     public String getRelayHost() {

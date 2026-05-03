@@ -12,15 +12,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class LanTunnelClient implements Runnable {
+    private static final long PING_INTERVAL_MILLIS = 5_000L;
+    private static final long PING_TIMEOUT_MILLIS = 10_000L;
+
     private final LanTunnelConfig config;
     private final int localPort;
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicInteger activeConnections = new AtomicInteger();
+    private final Object controlWriteLock = new Object();
 
     private volatile Thread thread;
     private volatile Socket controlSocket;
     private volatile boolean connected;
     private volatile int publicPort = -1;
+    private volatile long latencyMillis = -1;
+    private volatile long lastPingSentAt;
+    private volatile long nextPingAt;
     private volatile String message = "Starting tunnel.";
 
     public LanTunnelClient(LanTunnelConfig config, int localPort) {
@@ -50,7 +57,7 @@ public final class LanTunnelClient implements Runnable {
     }
 
     public TunnelStatus getStatus() {
-        return new TunnelStatus(running.get(), connected, localPort, publicPort, activeConnections.get(), message);
+        return new TunnelStatus(running.get(), connected, localPort, publicPort, activeConnections.get(), latencyMillis, message);
     }
 
     @Override
@@ -66,6 +73,9 @@ public final class LanTunnelClient implements Runnable {
             } finally {
                 connected = false;
                 publicPort = -1;
+                latencyMillis = -1;
+                lastPingSentAt = 0;
+                nextPingAt = 0;
                 TunnelIo.closeQuietly(controlSocket);
                 controlSocket = null;
             }
@@ -93,7 +103,11 @@ public final class LanTunnelClient implements Runnable {
         }
         publicPort = parsePublicPort(response);
         connected = true;
+        latencyMillis = -1;
+        lastPingSentAt = 0;
+        nextPingAt = System.currentTimeMillis();
         message = "Published. Friends can connect through the relay.";
+        startLatencyPinger(socket);
 
         while (running.get()) {
             String line = Protocol.readLine(socket.getInputStream(), 4096);
@@ -104,8 +118,60 @@ public final class LanTunnelClient implements Runnable {
                 openDataConnection(line.substring(5).trim());
             } else if (line.startsWith("ERR ")) {
                 message = line;
+            } else if (line.equals("PONG")) {
+                recordPong();
             }
         }
+    }
+
+    private void startLatencyPinger(Socket socket) {
+        Thread pingThread = new Thread(() -> runLatencyPinger(socket), "lan-tunnel-ping");
+        pingThread.setDaemon(true);
+        pingThread.start();
+    }
+
+    private void runLatencyPinger(Socket socket) {
+        while (running.get() && connected && controlSocket == socket) {
+            try {
+                sendPingIfDue(socket);
+                Thread.sleep(500L);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                return;
+            } catch (IOException exception) {
+                if (running.get() && connected) {
+                    LanTunnelMod.LOGGER.debug("LAN tunnel latency ping failed", exception);
+                }
+                return;
+            }
+        }
+    }
+
+    private void sendPingIfDue(Socket socket) throws IOException {
+        long now = System.currentTimeMillis();
+        if (lastPingSentAt > 0) {
+            if (now - lastPingSentAt <= PING_TIMEOUT_MILLIS) {
+                return;
+            }
+            latencyMillis = -1;
+            lastPingSentAt = 0;
+        }
+        if (now < nextPingAt) {
+            return;
+        }
+        synchronized (controlWriteLock) {
+            Protocol.writeLine(socket.getOutputStream(), "PING");
+        }
+        lastPingSentAt = now;
+        nextPingAt = now + PING_INTERVAL_MILLIS;
+    }
+
+    private void recordPong() {
+        if (lastPingSentAt <= 0) {
+            return;
+        }
+        latencyMillis = Math.max(0, System.currentTimeMillis() - lastPingSentAt);
+        lastPingSentAt = 0;
     }
 
     private int parsePublicPort(String response) throws IOException {

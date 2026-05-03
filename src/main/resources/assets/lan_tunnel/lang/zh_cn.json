@@ -3,6 +3,7 @@
   "lan_tunnel.screen.enabled": "启用中转穿透",
   "lan_tunnel.screen.auto_start": "开启局域网后自动启动",
   "lan_tunnel.screen.allow_offline_players": "允许离线玩家加入",
+  "lan_tunnel.screen.show_latency_overlay": "游戏内显示中转延迟",
   "lan_tunnel.screen.relay_host": "中转服务器地址",
   "lan_tunnel.screen.control_port": "控制端口",
   "lan_tunnel.screen.token": "访问令牌",

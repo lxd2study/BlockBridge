@@ -6,6 +6,7 @@ public record TunnelStatus(
         int localPort,
         int publicPort,
         int activeConnections,
+        long latencyMillis,
         String message
 ) {
 }

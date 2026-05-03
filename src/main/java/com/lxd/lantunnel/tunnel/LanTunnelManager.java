@@ -8,7 +8,7 @@ public final class LanTunnelManager {
     private final Object lock = new Object();
     private volatile LanTunnelClient client;
     private volatile int lanPort = -1;
-    private volatile TunnelStatus idleStatus = new TunnelStatus(false, false, -1, -1, 0, "Waiting for Open to LAN.");
+    private volatile TunnelStatus idleStatus = new TunnelStatus(false, false, -1, -1, 0, -1, "Waiting for Open to LAN.");
 
     private LanTunnelManager() {
     }
@@ -31,7 +31,7 @@ public final class LanTunnelManager {
             return;
         }
         if (!config.isAutoStart()) {
-            idleStatus = new TunnelStatus(false, false, lanPort, -1, 0, "LAN is open. Auto start is off.");
+            idleStatus = new TunnelStatus(false, false, lanPort, -1, 0, -1, "LAN is open. Auto start is off.");
             return;
         }
         startIfNeeded(port, config);
@@ -58,11 +58,11 @@ public final class LanTunnelManager {
     public void startManually() {
         LanTunnelConfig config = LanTunnelConfig.get().copy();
         if (!config.isEnabled()) {
-            idleStatus = new TunnelStatus(false, false, lanPort, -1, 0, "Enable the tunnel first.");
+            idleStatus = new TunnelStatus(false, false, lanPort, -1, 0, -1, "Enable the tunnel first.");
             return;
         }
         if (lanPort <= 0) {
-            idleStatus = new TunnelStatus(false, false, -1, -1, 0, "Open the world to LAN first.");
+            idleStatus = new TunnelStatus(false, false, -1, -1, 0, -1, "Open the world to LAN first.");
             return;
         }
         startIfNeeded(lanPort, config);
@@ -103,7 +103,7 @@ public final class LanTunnelManager {
     private void stopWithMessage(String message) {
         synchronized (lock) {
             stopLocked();
-            idleStatus = new TunnelStatus(false, false, lanPort, -1, 0, message);
+            idleStatus = new TunnelStatus(false, false, lanPort, -1, 0, -1, message);
         }
     }
 

@@ -17,8 +17,9 @@ public final class LanTunnelConfigScreen extends Screen {
     private static final int MIN_PANEL_WIDTH = 360;
     private static final int LABEL_WIDTH = 132;
     private static final int ROW_HEIGHT = 28;
-    private static final int COMPACT_ROW_HEIGHT = 20;
+    private static final int COMPACT_ROW_HEIGHT = 18;
     private static final int FIELD_COUNT = 5;
+    private static final int OPTION_COUNT = 4;
     private static final int PANEL_COLOR = 0xB8000000;
     private static final int PANEL_BORDER = 0xAAFFFFFF;
     private static final int SECTION_COLOR = 0x66FFFFFF;
@@ -32,6 +33,7 @@ public final class LanTunnelConfigScreen extends Screen {
     private Checkbox enabledCheckbox;
     private Checkbox autoStartCheckbox;
     private Checkbox allowOfflinePlayersCheckbox;
+    private Checkbox showLatencyOverlayCheckbox;
     private Button startStopButton;
     private int panelLeft;
     private int panelTop;
@@ -70,6 +72,9 @@ public final class LanTunnelConfigScreen extends Screen {
         y += compactLayout ? 21 : 24;
         allowOfflinePlayersCheckbox = addRenderableWidget(new Checkbox(panelLeft + 18, y, panelWidth - 36, 20,
                 Component.translatable("lan_tunnel.screen.allow_offline_players"), config.isAllowOfflinePlayers()));
+        y += compactLayout ? 19 : 24;
+        showLatencyOverlayCheckbox = addRenderableWidget(new Checkbox(panelLeft + 18, y, panelWidth - 36, 20,
+                Component.translatable("lan_tunnel.screen.show_latency_overlay"), config.isShowLatencyOverlay()));
 
         y = formY;
         relayHostBox = addBox(fieldX, y, config.getRelayHost(), 128);
@@ -110,9 +115,9 @@ public final class LanTunnelConfigScreen extends Screen {
         rowHeight = compactLayout ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
         fieldHeight = compactLayout ? 18 : 20;
         buttonY = height - (compactLayout ? 28 : 36);
-        checkboxY = panelTop + (compactLayout ? 20 : 38);
-        sectionY = panelTop + 128;
-        formY = panelTop + (compactLayout ? 88 : 150);
+        checkboxY = panelTop + (compactLayout ? 18 : 38);
+        sectionY = panelTop + 152;
+        formY = panelTop + (compactLayout ? 100 : 174);
         statusHeight = compactLayout ? 34 : 58;
 
         fieldX = panelLeft + LABEL_WIDTH + 20;
@@ -128,7 +133,8 @@ public final class LanTunnelConfigScreen extends Screen {
         if (latestStatusY >= minStatusY) {
             statusY = Math.min(Math.max(preferredStatusY, minStatusY), latestStatusY);
         } else {
-            formY = Math.max(panelTop + (compactLayout ? 86 : 136),
+            int compactFormTop = checkboxY + 20 + (OPTION_COUNT - 1) * (compactLayout ? 19 : 24) + 4;
+            formY = Math.max(panelTop + (compactLayout ? compactFormTop - panelTop : 160),
                     latestStatusY - rowHeight * FIELD_COUNT - (compactLayout ? 6 : 10));
             minStatusY = formY + rowHeight * FIELD_COUNT + (compactLayout ? 6 : 10);
             statusY = latestStatusY;
@@ -252,6 +258,7 @@ public final class LanTunnelConfigScreen extends Screen {
         next.setEnabled(enabledCheckbox.selected());
         next.setAutoStart(autoStartCheckbox.selected());
         next.setAllowOfflinePlayers(allowOfflinePlayersCheckbox.selected());
+        next.setShowLatencyOverlay(showLatencyOverlayCheckbox.selected());
         next.setRelayHost(relayHostBox.getValue().trim());
         next.setRelayControlPort(parseInt(controlPortBox.getValue(), -1));
         next.setToken(tokenBox.getValue().trim());
