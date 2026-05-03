@@ -8,6 +8,18 @@ export class RelayClient {
     return this.request(node, "GET", "/api/status");
   }
 
+  async health(node) {
+    return this.request(node, "GET", "/api/health");
+  }
+
+  async tunnels(node) {
+    return this.request(node, "GET", "/api/tunnels");
+  }
+
+  async tokenUsage(node, name) {
+    return this.request(node, "GET", `/api/tokens/${encodeURIComponent(name)}/usage`);
+  }
+
   async addToken(node, token) {
     return this.request(node, "POST", "/api/tokens", token);
   }

@@ -19,11 +19,15 @@ type StationConfig struct {
 }
 
 type RelayConfig struct {
-	Bind                 string `json:"bind"`
-	ControlPort          int    `json:"controlPort"`
-	PublicMin            int    `json:"publicMin"`
-	PublicMax            int    `json:"publicMax"`
-	ConnectTimeoutMillis int    `json:"connectTimeoutMillis"`
+	Bind                         string `json:"bind"`
+	ControlPort                  int    `json:"controlPort"`
+	PublicMin                    int    `json:"publicMin"`
+	PublicMax                    int    `json:"publicMax"`
+	ConnectTimeoutMillis         int    `json:"connectTimeoutMillis"`
+	PendingClientTimeoutMillis   int    `json:"pendingClientTimeoutMillis"`
+	MaxTunnelsPerToken           int    `json:"maxTunnelsPerToken"`
+	MaxConcurrentStreamsPerToken int    `json:"maxConcurrentStreamsPerToken"`
+	MaxPendingClientsPerToken    int    `json:"maxPendingClientsPerToken"`
 }
 
 type APIConfig struct {
@@ -227,6 +231,18 @@ func normalizeConfig(cfg *StationConfig) {
 	if cfg.Relay.ConnectTimeoutMillis == 0 {
 		cfg.Relay.ConnectTimeoutMillis = 15000
 	}
+	if cfg.Relay.PendingClientTimeoutMillis == 0 {
+		cfg.Relay.PendingClientTimeoutMillis = cfg.Relay.ConnectTimeoutMillis
+	}
+	if cfg.Relay.MaxTunnelsPerToken == 0 {
+		cfg.Relay.MaxTunnelsPerToken = 1
+	}
+	if cfg.Relay.MaxConcurrentStreamsPerToken == 0 {
+		cfg.Relay.MaxConcurrentStreamsPerToken = 32
+	}
+	if cfg.Relay.MaxPendingClientsPerToken == 0 {
+		cfg.Relay.MaxPendingClientsPerToken = 32
+	}
 	if cfg.API.Bind == "" {
 		cfg.API.Bind = "0.0.0.0:8080"
 	}
@@ -247,6 +263,18 @@ func validateConfig(cfg StationConfig) error {
 	}
 	if cfg.Relay.ConnectTimeoutMillis < 1000 {
 		return fmt.Errorf("connectTimeoutMillis must be at least 1000")
+	}
+	if cfg.Relay.PendingClientTimeoutMillis < 1000 {
+		return fmt.Errorf("pendingClientTimeoutMillis must be at least 1000")
+	}
+	if cfg.Relay.MaxTunnelsPerToken < 1 {
+		return fmt.Errorf("maxTunnelsPerToken must be at least 1")
+	}
+	if cfg.Relay.MaxConcurrentStreamsPerToken < 1 {
+		return fmt.Errorf("maxConcurrentStreamsPerToken must be at least 1")
+	}
+	if cfg.Relay.MaxPendingClientsPerToken < 1 {
+		return fmt.Errorf("maxPendingClientsPerToken must be at least 1")
 	}
 	if cfg.API.Password == "" {
 		return fmt.Errorf("api password is required")

@@ -4,7 +4,11 @@
     "controlPort": 25566,
     "publicMin": 25565,
     "publicMax": 25665,
-    "connectTimeoutMillis": 15000
+    "connectTimeoutMillis": 15000,
+    "pendingClientTimeoutMillis": 15000,
+    "maxTunnelsPerToken": 1,
+    "maxConcurrentStreamsPerToken": 32,
+    "maxPendingClientsPerToken": 32
   },
   "api": {
     "bind": "0.0.0.0:8080",

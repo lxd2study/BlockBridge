@@ -42,7 +42,12 @@ config/station.json
     "bind": "0.0.0.0",
     "controlPort": 25566,
     "publicMin": 25565,
-    "publicMax": 25665
+    "publicMax": 25665,
+    "connectTimeoutMillis": 15000,
+    "pendingClientTimeoutMillis": 15000,
+    "maxTunnelsPerToken": 1,
+    "maxConcurrentStreamsPerToken": 32,
+    "maxPendingClientsPerToken": 32
   },
   "api": {
     "bind": "0.0.0.0:8080",
@@ -53,6 +58,13 @@ config/station.json
 ```
 
 节点 ID、名称、区域、公网地址等节点信息都在 `relay-manager` 中配置。`tokens` 是节点初始令牌；后续令牌也可以在 `relay-manager` 中统一添加和删除。
+
+连接限制说明：
+
+- `maxTunnelsPerToken`：单个 Token 同时可发布的隧道数，当前建议保持 1。
+- `maxConcurrentStreamsPerToken`：单个 Token 的最大实时玩家连接数。
+- `maxPendingClientsPerToken`：等待 Mod 建立数据连接的最大排队数。
+- `pendingClientTimeoutMillis`：公网玩家连接等待数据通道的超时时间。
 
 ## 运行
 
@@ -79,6 +91,32 @@ TCP 8080，只允许 relay-manager 服务器访问
 ```
 
 生产环境建议只允许 `relay-manager` 服务器 IP 访问 `8080`。
+
+## API
+
+所有 API 都使用 Basic Auth，账号密码来自 `api.username` 和 `api.password`。
+
+```text
+GET  /api/health
+GET  /api/status
+GET  /api/tunnels
+GET  /api/tokens
+POST /api/tokens
+GET  /api/tokens/:name/usage
+DELETE /api/tokens/:name
+POST /api/tunnels/:name/close
+```
+
+Mod 协议支持：
+
+```text
+HOST <token> <requestedPublicPort> <clientVersion>
+TEST <token> <clientVersion>
+DATA <token> <connectionId>
+PING <timestamp>
+PONG <timestamp>
+ERR <code> <message>
+```
 
 ## Linux systemd
 

@@ -1,6 +1,8 @@
 package com.lxd.lantunnel.client;
 
 import com.lxd.lantunnel.config.LanTunnelConfig;
+import com.lxd.lantunnel.tunnel.ConnectionTestResult;
+import com.lxd.lantunnel.tunnel.LanTunnelClient;
 import com.lxd.lantunnel.tunnel.LanTunnelManager;
 import com.lxd.lantunnel.tunnel.TunnelStatus;
 import net.minecraft.client.gui.GuiGraphics;
@@ -18,8 +20,8 @@ public final class LanTunnelConfigScreen extends Screen {
     private static final int LABEL_WIDTH = 132;
     private static final int ROW_HEIGHT = 28;
     private static final int COMPACT_ROW_HEIGHT = 18;
-    private static final int FIELD_COUNT = 5;
-    private static final int OPTION_COUNT = 4;
+    private static final int FIELD_COUNT = 6;
+    private static final int OPTION_COUNT = 5;
     private static final int PANEL_COLOR = 0xB8000000;
     private static final int PANEL_BORDER = 0xAAFFFFFF;
     private static final int SECTION_COLOR = 0x66FFFFFF;
@@ -30,10 +32,12 @@ public final class LanTunnelConfigScreen extends Screen {
     private EditBox tokenBox;
     private EditBox publicPortBox;
     private EditBox reconnectDelayBox;
+    private EditBox testTimeoutBox;
     private Checkbox enabledCheckbox;
     private Checkbox autoStartCheckbox;
     private Checkbox allowOfflinePlayersCheckbox;
     private Checkbox showLatencyOverlayCheckbox;
+    private Checkbox autoSelectNodeCheckbox;
     private Button startStopButton;
     private int panelLeft;
     private int panelTop;
@@ -75,6 +79,9 @@ public final class LanTunnelConfigScreen extends Screen {
         y += compactLayout ? 19 : 24;
         showLatencyOverlayCheckbox = addRenderableWidget(new Checkbox(panelLeft + 18, y, panelWidth - 36, 20,
                 Component.translatable("lan_tunnel.screen.show_latency_overlay"), config.isShowLatencyOverlay()));
+        y += compactLayout ? 19 : 24;
+        autoSelectNodeCheckbox = addRenderableWidget(new Checkbox(panelLeft + 18, y, panelWidth - 36, 20,
+                Component.translatable("lan_tunnel.screen.auto_select_node"), config.isAutoSelectNode()));
 
         y = formY;
         relayHostBox = addBox(fieldX, y, config.getRelayHost(), 128);
@@ -86,9 +93,11 @@ public final class LanTunnelConfigScreen extends Screen {
         publicPortBox = addPortBox(fieldX, y, config.getRequestedPublicPort());
         y += rowHeight;
         reconnectDelayBox = addPortBox(fieldX, y, config.getReconnectDelaySeconds());
+        y += rowHeight;
+        testTimeoutBox = addPortBox(fieldX, y, config.getConnectionTestTimeoutSeconds());
 
         int gap = 8;
-        int buttonWidth = Math.max(72, (panelWidth - gap * 2) / 3);
+        int buttonWidth = Math.max(48, (panelWidth - gap * 4) / 5);
         startStopButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
             if (LanTunnelManager.get().isRunning()) {
                 LanTunnelManager.get().stopManually();
@@ -96,16 +105,20 @@ public final class LanTunnelConfigScreen extends Screen {
                 LanTunnelManager.get().startManually();
             }
         }).bounds(panelLeft, buttonY, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("lan_tunnel.screen.save"), button -> applyAndSave())
+        addRenderableWidget(Button.builder(Component.translatable("lan_tunnel.screen.test"), button -> testConnection())
                 .bounds(panelLeft + buttonWidth + gap, buttonY, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("lan_tunnel.screen.copy_address"), button -> copyShareAddress())
                 .bounds(panelLeft + (buttonWidth + gap) * 2, buttonY, buttonWidth, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("lan_tunnel.screen.save"), button -> applyAndSave())
+                .bounds(panelLeft + (buttonWidth + gap) * 3, buttonY, buttonWidth, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> onClose())
+                .bounds(panelLeft + (buttonWidth + gap) * 4, buttonY, buttonWidth, 20).build());
 
         updateStartStopButton();
     }
 
     private void computeLayout() {
-        compactLayout = height < 400;
+        compactLayout = height < 460;
         panelWidth = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, width - 48));
         if (width < MIN_PANEL_WIDTH + 32) {
             panelWidth = Math.max(300, width - 24);
@@ -116,9 +129,11 @@ public final class LanTunnelConfigScreen extends Screen {
         fieldHeight = compactLayout ? 18 : 20;
         buttonY = height - (compactLayout ? 28 : 36);
         checkboxY = panelTop + (compactLayout ? 18 : 38);
-        sectionY = panelTop + 152;
-        formY = panelTop + (compactLayout ? 100 : 174);
-        statusHeight = compactLayout ? 34 : 58;
+        int optionStep = compactLayout ? 19 : 24;
+        int optionsBottom = checkboxY + 20 + (OPTION_COUNT - 1) * optionStep;
+        sectionY = optionsBottom + (compactLayout ? 8 : 14);
+        formY = sectionY + (compactLayout ? 12 : 22);
+        statusHeight = compactLayout ? 34 : 72;
 
         fieldX = panelLeft + LABEL_WIDTH + 20;
         fieldWidth = panelWidth - LABEL_WIDTH - 40;
@@ -133,7 +148,7 @@ public final class LanTunnelConfigScreen extends Screen {
         if (latestStatusY >= minStatusY) {
             statusY = Math.min(Math.max(preferredStatusY, minStatusY), latestStatusY);
         } else {
-            int compactFormTop = checkboxY + 20 + (OPTION_COUNT - 1) * (compactLayout ? 19 : 24) + 4;
+            int compactFormTop = optionsBottom + 4;
             formY = Math.max(panelTop + (compactLayout ? compactFormTop - panelTop : 160),
                     latestStatusY - rowHeight * FIELD_COUNT - (compactLayout ? 6 : 10));
             minStatusY = formY + rowHeight * FIELD_COUNT + (compactLayout ? 6 : 10);
@@ -162,6 +177,7 @@ public final class LanTunnelConfigScreen extends Screen {
         tokenBox.tick();
         publicPortBox.tick();
         reconnectDelayBox.tick();
+        testTimeoutBox.tick();
         updateStartStopButton();
     }
 
@@ -187,6 +203,8 @@ public final class LanTunnelConfigScreen extends Screen {
         drawLabel(graphics, "lan_tunnel.screen.public_port", labelX, y);
         y += rowHeight;
         drawLabel(graphics, "lan_tunnel.screen.reconnect_delay", labelX, y);
+        y += rowHeight;
+        drawLabel(graphics, "lan_tunnel.screen.test_timeout", labelX, y);
 
         super.render(graphics, mouseX, mouseY, partialTick);
         drawStatus(graphics);
@@ -223,12 +241,20 @@ public final class LanTunnelConfigScreen extends Screen {
             graphics.drawString(font, shorten(message.getString(), 72), statusLeft, statusY + lineHeight * 2, 0xFFD080);
         } else if (!status.message().isBlank() && !status.connected()) {
             graphics.drawString(font, shorten(status.message(), 72), statusLeft, statusY + lineHeight * 2, 0xAAAAAA);
+        } else if (!status.publicAddress().isBlank()) {
+            graphics.drawString(font, Component.translatable("lan_tunnel.screen.share_address",
+                    status.publicAddress()), statusLeft, statusY + lineHeight * 2, 0x80FF80);
         } else if (status.publicPort() > 0) {
             graphics.drawString(font, Component.translatable("lan_tunnel.screen.share_address",
                     relayHostBox.getValue().trim() + ":" + status.publicPort()), statusLeft, statusY + lineHeight * 2, 0x80FF80);
         } else {
             graphics.drawString(font, Component.translatable("lan_tunnel.screen.share_address", "-"),
                     statusLeft, statusY + lineHeight * 2, 0x777777);
+        }
+        if (!compactLayout && !status.diagnosticCode().isBlank() && !status.diagnosticCode().equals("CONNECTED")) {
+            graphics.drawString(font, Component.translatable("lan_tunnel.screen.diagnostic",
+                    status.diagnosticCode(), status.consecutiveFailures()), statusLeft + Math.min(300, statusWidth / 2),
+                    statusY + lineHeight * 3, 0xAAAAAA);
         }
     }
 
@@ -254,16 +280,7 @@ public final class LanTunnelConfigScreen extends Screen {
     }
 
     private boolean applyAndSave() {
-        LanTunnelConfig next = LanTunnelConfig.get().copy();
-        next.setEnabled(enabledCheckbox.selected());
-        next.setAutoStart(autoStartCheckbox.selected());
-        next.setAllowOfflinePlayers(allowOfflinePlayersCheckbox.selected());
-        next.setShowLatencyOverlay(showLatencyOverlayCheckbox.selected());
-        next.setRelayHost(relayHostBox.getValue().trim());
-        next.setRelayControlPort(parseInt(controlPortBox.getValue(), -1));
-        next.setToken(tokenBox.getValue().trim());
-        next.setRequestedPublicPort(parseInt(publicPortBox.getValue(), -1));
-        next.setReconnectDelaySeconds(parseInt(reconnectDelayBox.getValue(), -1));
+        LanTunnelConfig next = formConfig();
 
         String validationError = next.validate();
         if (validationError != null) {
@@ -281,6 +298,53 @@ public final class LanTunnelConfigScreen extends Screen {
             message = Component.literal("Save failed: " + exception.getMessage());
             return false;
         }
+    }
+
+    private LanTunnelConfig formConfig() {
+        LanTunnelConfig next = LanTunnelConfig.get().copy();
+        next.setEnabled(enabledCheckbox.selected());
+        next.setAutoStart(autoStartCheckbox.selected());
+        next.setAllowOfflinePlayers(allowOfflinePlayersCheckbox.selected());
+        next.setShowLatencyOverlay(showLatencyOverlayCheckbox.selected());
+        next.setAutoSelectNode(autoSelectNodeCheckbox.selected());
+        next.setSingleRelayNode(relayHostBox.getValue().trim(), parseInt(controlPortBox.getValue(), -1));
+        next.setToken(tokenBox.getValue().trim());
+        next.setRequestedPublicPort(parseInt(publicPortBox.getValue(), -1));
+        next.setReconnectDelaySeconds(parseInt(reconnectDelayBox.getValue(), -1));
+        next.setConnectionTestTimeoutSeconds(parseInt(testTimeoutBox.getValue(), -1));
+        return next;
+    }
+
+    private void testConnection() {
+        LanTunnelConfig next = formConfig();
+        String validationError = next.validate();
+        if (validationError != null) {
+            message = Component.literal(validationError);
+            return;
+        }
+        message = Component.translatable("lan_tunnel.screen.testing");
+        Thread thread = new Thread(() -> {
+            ConnectionTestResult result = LanTunnelClient.testConnection(next);
+            message = Component.literal(result.message());
+        }, "lan-tunnel-connection-test");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private void copyShareAddress() {
+        TunnelStatus status = LanTunnelManager.get().getStatus();
+        String address = status.publicAddress();
+        if (address == null || address.isBlank()) {
+            if (status.publicPort() > 0) {
+                address = relayHostBox.getValue().trim() + ":" + status.publicPort();
+            }
+        }
+        if (address == null || address.isBlank()) {
+            message = Component.translatable("lan_tunnel.screen.no_address");
+            return;
+        }
+        minecraft.keyboardHandler.setClipboard(address);
+        message = Component.translatable("lan_tunnel.screen.address_copied");
     }
 
     private static int parseInt(String value, int fallback) {

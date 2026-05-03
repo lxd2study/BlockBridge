@@ -8,7 +8,7 @@ public final class LanTunnelManager {
     private final Object lock = new Object();
     private volatile LanTunnelClient client;
     private volatile int lanPort = -1;
-    private volatile TunnelStatus idleStatus = new TunnelStatus(false, false, -1, -1, 0, -1, "Waiting for Open to LAN.");
+    private volatile TunnelStatus idleStatus = new TunnelStatus(false, false, -1, -1, 0, -1, "等待开启局域网。");
 
     private LanTunnelManager() {
     }
@@ -27,11 +27,11 @@ public final class LanTunnelManager {
         lanPort = port;
         LanTunnelConfig config = LanTunnelConfig.get().copy();
         if (!config.isEnabled()) {
-            stopWithMessage("Tunnel is disabled.");
+            stopWithMessage("穿透未启用。");
             return;
         }
         if (!config.isAutoStart()) {
-            idleStatus = new TunnelStatus(false, false, lanPort, -1, 0, -1, "LAN is open. Auto start is off.");
+            idleStatus = new TunnelStatus(false, false, lanPort, -1, 0, -1, "局域网已开启，自动启动已关闭。");
             return;
         }
         startIfNeeded(port, config);
@@ -39,37 +39,37 @@ public final class LanTunnelManager {
 
     public void onLanClosed() {
         lanPort = -1;
-        stopWithMessage("Waiting for Open to LAN.");
+        stopWithMessage("等待开启局域网。");
     }
 
     public void onConfigChanged() {
         LanTunnelConfig config = LanTunnelConfig.get().copy();
         if (!config.isEnabled()) {
-            stopWithMessage("Tunnel is disabled.");
+            stopWithMessage("穿透未启用。");
             return;
         }
         if (lanPort > 0 && config.isAutoStart()) {
             startIfNeeded(lanPort, config);
         } else {
-            stopWithMessage(lanPort > 0 ? "LAN is open. Press Start to publish." : "Waiting for Open to LAN.");
+            stopWithMessage(lanPort > 0 ? "局域网已开启，点击启动发布。" : "等待开启局域网。");
         }
     }
 
     public void startManually() {
         LanTunnelConfig config = LanTunnelConfig.get().copy();
         if (!config.isEnabled()) {
-            idleStatus = new TunnelStatus(false, false, lanPort, -1, 0, -1, "Enable the tunnel first.");
+            idleStatus = new TunnelStatus(false, false, lanPort, -1, 0, -1, "请先启用穿透。");
             return;
         }
         if (lanPort <= 0) {
-            idleStatus = new TunnelStatus(false, false, -1, -1, 0, -1, "Open the world to LAN first.");
+            idleStatus = new TunnelStatus(false, false, -1, -1, 0, -1, "请先对局域网开放世界。");
             return;
         }
         startIfNeeded(lanPort, config);
     }
 
     public void stopManually() {
-        stopWithMessage(lanPort > 0 ? "Stopped. LAN is still open." : "Stopped.");
+        stopWithMessage(lanPort > 0 ? "已停止，局域网仍处于开启状态。" : "已停止。");
     }
 
     public boolean isRunning() {

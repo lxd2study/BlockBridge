@@ -24,6 +24,13 @@ type StatusResponse struct {
 	Runtime RelaySnapshot `json:"runtime"`
 }
 
+type HealthResponse struct {
+	Status        string        `json:"status"`
+	StartedAt     time.Time     `json:"startedAt"`
+	UptimeSeconds int64         `json:"uptimeSeconds"`
+	Runtime       RelaySnapshot `json:"runtime"`
+}
+
 type APIView struct {
 	Bind     string `json:"bind"`
 	Username string `json:"username"`
@@ -43,8 +50,10 @@ func (a *APIServer) Start(ctx context.Context) error {
 	cfg := a.store.Snapshot()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", a.handleStatus)
+	mux.HandleFunc("/api/health", a.handleHealth)
 	mux.HandleFunc("/api/tokens", a.handleTokens)
 	mux.HandleFunc("/api/tokens/", a.handleTokenByName)
+	mux.HandleFunc("/api/tunnels", a.handleTunnels)
 	mux.HandleFunc("/api/tunnels/", a.handleTunnelByName)
 	mux.HandleFunc("/", a.handleNotFound)
 
@@ -106,6 +115,20 @@ func (a *APIServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (a *APIServer) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	runtime := a.relay.Snapshot()
+	writeJSON(w, HealthResponse{
+		Status:        "ok",
+		StartedAt:     runtime.StartedAt,
+		UptimeSeconds: runtime.UptimeSeconds,
+		Runtime:       runtime,
+	})
+}
+
 func (a *APIServer) handleTokens(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -128,6 +151,10 @@ func (a *APIServer) handleTokens(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *APIServer) handleTokenByName(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/usage") {
+		a.handleTokenUsage(w, r)
+		return
+	}
 	if r.Method != http.MethodDelete {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -143,6 +170,28 @@ func (a *APIServer) handleTokenByName(w http.ResponseWriter, r *http.Request) {
 	}
 	a.relay.CloseTunnelByName(name)
 	writeJSON(w, map[string]string{"status": "deleted"})
+}
+
+func (a *APIServer) handleTokenUsage(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSuffix(pathTail(r.URL.Path, "/api/tokens/"), "/usage")
+	if name == "" {
+		http.Error(w, "token name is required", http.StatusBadRequest)
+		return
+	}
+	usage, ok := a.relay.TokenUsage(name)
+	if !ok {
+		writeJSON(w, usage)
+		return
+	}
+	writeJSON(w, usage)
+}
+
+func (a *APIServer) handleTunnels(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, map[string]any{"tunnels": a.relay.Snapshot().Tunnels})
 }
 
 func (a *APIServer) handleTunnelByName(w http.ResponseWriter, r *http.Request) {

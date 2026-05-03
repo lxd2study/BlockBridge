@@ -2,9 +2,9 @@
   <div class="app-shell">
     <header class="topbar">
       <button class="brand" type="button" @click="go('/')">
-        <span class="brand-mark">LT</span>
+        <span class="brand-mark">BB</span>
         <span>
-          <strong>LAN Tunnel</strong>
+          <strong>BlockBridge</strong>
           <small>Relay Manager</small>
         </span>
       </button>
@@ -71,6 +71,7 @@
         <article><span>在线节点</span><strong>{{ publicStatus.totals?.online || 0 }}</strong></article>
         <article><span>在线隧道</span><strong>{{ publicStatus.totals?.tunnels || 0 }}</strong></article>
         <article><span>实时连接</span><strong>{{ publicStatus.totals?.streams || 0 }}</strong></article>
+        <article><span>等待连接</span><strong>{{ publicStatus.totals?.pending || 0 }}</strong></article>
       </section>
       <section class="status-grid">
         <article v-for="node in publicStatus.nodes" :key="node.id" class="status-card">
@@ -87,6 +88,7 @@
           <div class="status-load">
             <span>隧道 {{ node.activeTunnels }}</span>
             <span>连接 {{ node.activeStreams }}</span>
+            <span>等待 {{ node.pendingClients || 0 }}</span>
           </div>
           <p v-if="node.error" class="error">{{ node.error }}</p>
         </article>
@@ -113,7 +115,7 @@
     <main v-else-if="page === 'login'" class="login-page">
       <form class="login-panel" @submit.prevent="login">
         <p class="eyebrow">Secure Console</p>
-        <h1>登录 LAN Tunnel</h1>
+        <h1>登录 BlockBridge</h1>
         <label>账号<input v-model="loginForm.username" autocomplete="username" required /></label>
         <label>密码<input v-model="loginForm.password" type="password" autocomplete="current-password" required /></label>
         <button class="primary" type="submit">登录</button>
@@ -144,6 +146,7 @@
             <article><span>在线</span><strong>{{ overview.totals?.online || 0 }}</strong></article>
             <article><span>隧道</span><strong>{{ overview.totals?.tunnels || 0 }}</strong></article>
             <article><span>连接</span><strong>{{ overview.totals?.streams || 0 }}</strong></article>
+            <article><span>等待</span><strong>{{ overview.totals?.pending || 0 }}</strong></article>
             <article><span>流量</span><strong>{{ bytes(overview.totals?.traffic || 0) }}</strong></article>
           </section>
           <section class="health-board">
@@ -152,7 +155,7 @@
               <div>
                 <h3>{{ item.record.name }}</h3>
                 <p>{{ item.record.region }} · {{ item.record.publicHost }}</p>
-                <small>{{ item.error || `${item.status?.runtime?.activeTunnels || 0} 隧道 / ${item.status?.runtime?.activeStreams || 0} 连接` }}</small>
+                <small>{{ item.error || `${item.status?.runtime?.activeTunnels || 0} 隧道 / ${item.status?.runtime?.activeStreams || 0} 连接 / ${item.status?.runtime?.pendingClients || 0} 等待` }}</small>
               </div>
             </article>
           </section>
@@ -164,7 +167,12 @@
             <article v-for="item in overview.nodes" :key="item.record.id" class="node-card">
               <header><strong>{{ item.record.name }}</strong><span :class="['state', item.online ? 'on' : 'off']">{{ item.online ? '在线' : '离线' }}</span></header>
               <p>{{ item.record.publicHost }} · {{ item.record.apiBase }}</p>
-              <small>{{ item.error || `${item.status?.runtime?.activeTunnels || 0} 隧道 / ${item.status?.runtime?.activeStreams || 0} 连接` }}</small>
+              <small>{{ item.error || `${item.status?.runtime?.activeTunnels || 0} 隧道 / ${item.status?.runtime?.activeStreams || 0} 连接 / 端口池 ${item.status?.runtime?.portPoolUsed || 0}/${item.status?.runtime?.portPoolTotal || 0}` }}</small>
+              <div v-if="item.status?.runtime?.tunnels?.length" class="tunnel-mini-list">
+                <span v-for="tunnel in item.status.runtime.tunnels" :key="`${item.record.id}-${tunnel.tokenName}`">
+                  {{ tunnel.tokenName }} · {{ tunnel.publicPort }} · {{ tunnel.clientVersion || 'legacy' }} · {{ bytes((tunnel.totalBytesToHost || 0) + (tunnel.totalBytesToUser || 0)) }}
+                </span>
+              </div>
             </article>
           </section>
         </div>

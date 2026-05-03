@@ -25,22 +25,23 @@ type Relay struct {
 }
 
 type Tunnel struct {
-	relay        *Relay
-	token        string
-	tokenName    string
-	control      net.Conn
-	controlMu    sync.Mutex
-	publicLn     net.Listener
-	publicPort   int
-	createdAt    time.Time
-	lastActivity atomic.Int64
-	active       atomic.Bool
-	activeStream atomic.Int64
-	totalPublic  atomic.Int64
-	totalToHost  atomic.Int64
-	totalToUser  atomic.Int64
-	pendingMu    sync.Mutex
-	pending      map[string]net.Conn
+	relay         *Relay
+	token         string
+	tokenName     string
+	clientVersion string
+	control       net.Conn
+	controlMu     sync.Mutex
+	publicLn      net.Listener
+	publicPort    int
+	createdAt     time.Time
+	lastActivity  atomic.Int64
+	active        atomic.Bool
+	activeStream  atomic.Int64
+	totalPublic   atomic.Int64
+	totalToHost   atomic.Int64
+	totalToUser   atomic.Int64
+	pendingMu     sync.Mutex
+	pending       map[string]net.Conn
 }
 
 type RelaySnapshot struct {
@@ -49,6 +50,8 @@ type RelaySnapshot struct {
 	ActiveTunnels    int              `json:"activeTunnels"`
 	ActiveStreams    int64            `json:"activeStreams"`
 	PendingClients   int              `json:"pendingClients"`
+	PortPoolUsed     int              `json:"portPoolUsed"`
+	PortPoolTotal    int              `json:"portPoolTotal"`
 	TotalPublic      int64            `json:"totalPublicConnections"`
 	TotalBytesToHost int64            `json:"totalBytesToHost"`
 	TotalBytesToUser int64            `json:"totalBytesToUser"`
@@ -57,6 +60,7 @@ type RelaySnapshot struct {
 
 type TunnelSnapshot struct {
 	TokenName        string    `json:"tokenName"`
+	ClientVersion    string    `json:"clientVersion"`
 	PublicPort       int       `json:"publicPort"`
 	PublicAddress    string    `json:"publicAddress"`
 	CreatedAt        time.Time `json:"createdAt"`
@@ -66,6 +70,16 @@ type TunnelSnapshot struct {
 	TotalPublic       int64     `json:"totalPublicConnections"`
 	TotalBytesToHost  int64     `json:"totalBytesToHost"`
 	TotalBytesToUser  int64     `json:"totalBytesToUser"`
+}
+
+type TokenUsageSnapshot struct {
+	TokenName              string `json:"tokenName"`
+	ActiveTunnels          int    `json:"activeTunnels"`
+	ActiveStreams          int64  `json:"activeStreams"`
+	PendingClients         int    `json:"pendingClients"`
+	TotalPublicConnections int64  `json:"totalPublicConnections"`
+	TotalBytesToHost       int64  `json:"totalBytesToHost"`
+	TotalBytesToUser       int64  `json:"totalBytesToUser"`
 }
 
 func NewRelay(store *ConfigStore) *Relay {
@@ -119,9 +133,11 @@ func (r *Relay) Stop() {
 
 func (r *Relay) Snapshot() RelaySnapshot {
 	now := time.Now()
+	cfg := r.store.Snapshot()
 	snapshot := RelaySnapshot{
 		StartedAt:        r.startedAt,
 		UptimeSeconds:    int64(now.Sub(r.startedAt).Seconds()),
+		PortPoolTotal:    cfg.Relay.PublicMax - cfg.Relay.PublicMin + 1,
 		TotalPublic:      r.totalPublic.Load(),
 		TotalBytesToHost: r.totalToHost.Load(),
 		TotalBytesToUser: r.totalToUser.Load(),
@@ -130,6 +146,7 @@ func (r *Relay) Snapshot() RelaySnapshot {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	snapshot.ActiveTunnels = len(r.tunnels)
+	snapshot.PortPoolUsed = len(r.tunnels)
 	for _, tunnel := range r.tunnels {
 		item := tunnel.Snapshot()
 		snapshot.ActiveStreams += item.ActiveStreams
@@ -137,6 +154,30 @@ func (r *Relay) Snapshot() RelaySnapshot {
 		snapshot.Tunnels = append(snapshot.Tunnels, item)
 	}
 	return snapshot
+}
+
+func (r *Relay) TokenUsage(name string) (TokenUsageSnapshot, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var usage TokenUsageSnapshot
+	for _, tunnel := range r.tunnels {
+		if !strings.EqualFold(tunnel.tokenName, name) {
+			continue
+		}
+		item := tunnel.Snapshot()
+		usage.TokenName = tunnel.tokenName
+		usage.ActiveTunnels++
+		usage.ActiveStreams += item.ActiveStreams
+		usage.PendingClients += item.PendingClients
+		usage.TotalPublicConnections += item.TotalPublic
+		usage.TotalBytesToHost += item.TotalBytesToHost
+		usage.TotalBytesToUser += item.TotalBytesToUser
+	}
+	if usage.TokenName == "" {
+		return TokenUsageSnapshot{TokenName: name}, false
+	}
+	return usage, true
 }
 
 func (r *Relay) CloseTunnelByName(name string) bool {
@@ -170,18 +211,60 @@ func (r *Relay) handleConnection(conn net.Conn) {
 	}
 
 	switch parts[0] {
+	case "HELLO":
+		r.handleHello(conn, reader, parts)
 	case "HOST":
 		r.handleHost(conn, reader, parts)
 	case "DATA":
 		r.handleData(conn, parts)
+	case "TEST":
+		r.handleTest(conn, parts)
 	default:
+		_ = writeLine(conn, "ERR BAD_REQUEST unsupported command")
+		_ = conn.Close()
+	}
+}
+
+func (r *Relay) handleHello(conn net.Conn, reader *bufio.Reader, parts []string) {
+	if len(parts) < 2 {
+		_ = writeLine(conn, "ERR BAD_REQUEST bad HELLO command")
+		_ = conn.Close()
+		return
+	}
+	if err := writeLine(conn, "OK HELLO 0.2"); err != nil {
+		_ = conn.Close()
+		return
+	}
+	line, err := readLine(reader, 4096)
+	if err != nil {
+		_ = conn.Close()
+		return
+	}
+	next := strings.Fields(line)
+	if len(next) == 0 {
+		_ = conn.Close()
+		return
+	}
+	switch next[0] {
+	case "HOST":
+		if len(next) == 3 {
+			next = append(next, parts[1])
+		}
+		r.handleHost(conn, reader, next)
+	case "TEST":
+		if len(next) == 2 {
+			next = append(next, parts[1])
+		}
+		r.handleTest(conn, next)
+	default:
+		_ = writeLine(conn, "ERR BAD_REQUEST unsupported command after HELLO")
 		_ = conn.Close()
 	}
 }
 
 func (r *Relay) handleHost(conn net.Conn, reader *bufio.Reader, parts []string) {
 	if len(parts) < 3 {
-		_ = writeLine(conn, "ERR bad HOST command")
+		_ = writeLine(conn, "ERR BAD_REQUEST bad HOST command")
 		_ = conn.Close()
 		return
 	}
@@ -189,12 +272,16 @@ func (r *Relay) handleHost(conn net.Conn, reader *bufio.Reader, parts []string) 
 	tokenText := parts[1]
 	token, ok := r.store.FindToken(tokenText)
 	if !ok {
-		_ = writeLine(conn, "ERR token rejected")
+		_ = writeLine(conn, "ERR TOKEN_REJECTED token rejected")
 		_ = conn.Close()
 		return
 	}
 
 	requestedPort, _ := strconv.Atoi(parts[2])
+	clientVersion := ""
+	if len(parts) >= 4 {
+		clientVersion = parts[3]
+	}
 
 	r.mu.Lock()
 	if old := r.tunnels[tokenText]; old != nil {
@@ -205,20 +292,21 @@ func (r *Relay) handleHost(conn net.Conn, reader *bufio.Reader, parts []string) 
 
 	publicLn, err := r.allocatePublicListener(requestedPort)
 	if err != nil {
-		_ = writeLine(conn, "ERR cannot bind public port: "+err.Error())
+		_ = writeLine(conn, "ERR PORT_BIND_FAILED "+err.Error())
 		_ = conn.Close()
 		return
 	}
 
 	tunnel := &Tunnel{
-		relay:      r,
-		token:      tokenText,
-		tokenName:  token.Name,
-		control:    conn,
-		publicLn:   publicLn,
-		publicPort: publicLn.Addr().(*net.TCPAddr).Port,
-		createdAt:  time.Now(),
-		pending:    map[string]net.Conn{},
+		relay:         r,
+		token:         tokenText,
+		tokenName:     token.Name,
+		clientVersion: clientVersion,
+		control:       conn,
+		publicLn:      publicLn,
+		publicPort:    publicLn.Addr().(*net.TCPAddr).Port,
+		createdAt:     time.Now(),
+		pending:       map[string]net.Conn{},
 	}
 	tunnel.active.Store(true)
 	tunnel.touch()
@@ -244,8 +332,13 @@ func (r *Relay) handleHost(conn net.Conn, reader *bufio.Reader, parts []string) 
 		if err != nil {
 			break
 		}
-		if line == "PING" {
-			_ = tunnel.sendControl("PONG")
+		if strings.HasPrefix(line, "PING") {
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				_ = tunnel.sendControl("PONG " + parts[1])
+			} else {
+				_ = tunnel.sendControl("PONG")
+			}
 		}
 	}
 
@@ -258,8 +351,22 @@ func (r *Relay) handleHost(conn net.Conn, reader *bufio.Reader, parts []string) 
 	fmt.Printf("host %s disconnected from port %d\n", tunnel.tokenName, tunnel.publicPort)
 }
 
+func (r *Relay) handleTest(conn net.Conn, parts []string) {
+	defer conn.Close()
+	if len(parts) < 2 {
+		_ = writeLine(conn, "ERR BAD_REQUEST bad TEST command")
+		return
+	}
+	if _, ok := r.store.FindToken(parts[1]); !ok {
+		_ = writeLine(conn, "ERR TOKEN_REJECTED token rejected")
+		return
+	}
+	_ = writeLine(conn, "OK ready")
+}
+
 func (r *Relay) handleData(conn net.Conn, parts []string) {
 	if len(parts) < 3 {
+		_ = writeLine(conn, "ERR BAD_REQUEST bad DATA command")
 		_ = conn.Close()
 		return
 	}
@@ -270,6 +377,7 @@ func (r *Relay) handleData(conn net.Conn, parts []string) {
 	tunnel := r.tunnels[token]
 	r.mu.RUnlock()
 	if tunnel == nil {
+		_ = writeLine(conn, "ERR NODE_UNAVAILABLE tunnel not found")
 		_ = conn.Close()
 		return
 	}
@@ -314,10 +422,18 @@ func (t *Tunnel) requestDataConnection(conn net.Conn) error {
 	id := randomID()
 
 	t.pendingMu.Lock()
+	if len(t.pending) >= cfg.Relay.MaxPendingClientsPerToken {
+		t.pendingMu.Unlock()
+		return fmt.Errorf("pending client limit reached")
+	}
+	if t.activeStream.Load() >= int64(cfg.Relay.MaxConcurrentStreamsPerToken) {
+		t.pendingMu.Unlock()
+		return fmt.Errorf("stream limit reached")
+	}
 	t.pending[id] = conn
 	t.pendingMu.Unlock()
 
-	timeout := time.Duration(cfg.Relay.ConnectTimeoutMillis) * time.Millisecond
+	timeout := time.Duration(cfg.Relay.PendingClientTimeoutMillis) * time.Millisecond
 	time.AfterFunc(timeout, func() {
 		t.pendingMu.Lock()
 		pending := t.pending[id]
@@ -338,12 +454,19 @@ func (t *Tunnel) requestDataConnection(conn net.Conn) error {
 }
 
 func (t *Tunnel) attachData(id string, dataConn net.Conn) {
+	cfg := t.relay.store.Snapshot()
+	if t.activeStream.Load() >= int64(cfg.Relay.MaxConcurrentStreamsPerToken) {
+		_ = writeLine(dataConn, "ERR LIMIT_EXCEEDED stream limit reached")
+		_ = dataConn.Close()
+		return
+	}
 	t.pendingMu.Lock()
 	publicConn := t.pending[id]
 	delete(t.pending, id)
 	t.pendingMu.Unlock()
 
 	if publicConn == nil {
+		_ = writeLine(dataConn, "ERR NODE_UNAVAILABLE pending client not found")
 		_ = dataConn.Close()
 		return
 	}
@@ -371,6 +494,7 @@ func (t *Tunnel) Snapshot() TunnelSnapshot {
 	last := time.Unix(t.lastActivity.Load(), 0)
 	return TunnelSnapshot{
 		TokenName:       t.tokenName,
+		ClientVersion:   t.clientVersion,
 		PublicPort:      t.publicPort,
 		PublicAddress:   "",
 		CreatedAt:       t.createdAt,

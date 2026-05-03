@@ -413,7 +413,7 @@ small {
 }
 
 .public-status-metrics {
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
   margin-bottom: 18px;
 }
 
@@ -538,7 +538,7 @@ label {
 }
 
 .metrics-row {
-  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
 }
 
 .metrics-row article {
@@ -624,6 +624,22 @@ label {
 .node-card {
   display: grid;
   gap: 10px;
+}
+
+.tunnel-mini-list {
+  display: grid;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.tunnel-mini-list span {
+  padding: 7px 8px;
+  color: var(--steel);
+  background: #edf4f1;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .node-card header,

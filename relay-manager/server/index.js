@@ -102,11 +102,14 @@ function registerRoutes(app) {
       };
       const startedAt = Date.now();
       try {
-        const status = await relay.status(node);
+        const status = await relay.health(node).catch(() => relay.status(node));
         item.online = true;
         item.latencyMillis = Date.now() - startedAt;
         item.activeTunnels = Number(status.runtime?.activeTunnels || 0);
         item.activeStreams = Number(status.runtime?.activeStreams || 0);
+        item.pendingClients = Number(status.runtime?.pendingClients || 0);
+        item.portPoolUsed = Number(status.runtime?.portPoolUsed || 0);
+        item.portPoolTotal = Number(status.runtime?.portPoolTotal || 0);
       } catch (error) {
         item.error = error.message;
       }
@@ -119,6 +122,7 @@ function registerRoutes(app) {
         online: items.filter((item) => item.online).length,
         tunnels: items.reduce((sum, item) => sum + item.activeTunnels, 0),
         streams: items.reduce((sum, item) => sum + item.activeStreams, 0),
+        pending: items.reduce((sum, item) => sum + item.pendingClients, 0),
       },
       nodes: items,
     });
@@ -141,6 +145,16 @@ function registerRoutes(app) {
       return item;
     }));
     res.json({ nodes: items, totals: summarizeOverview(items) });
+  }));
+
+  app.get("/api/admin/nodes/:id/health", requireRole("admin"), asyncHandler(async (req, res) => {
+    const node = store.getNode(req.params.id, { includeSecrets: true });
+    if (!node) {
+      throw httpError(404, "node not found");
+    }
+    const health = await relay.health(node);
+    const tunnels = await relay.tunnels(node).catch(() => ({ tunnels: health.runtime?.tunnels || [] }));
+    res.json({ health: applyPublicHost(node, { runtime: health.runtime }).runtime, tunnels: tunnels.tunnels || [] });
   }));
 
   app.get("/api/admin/users", requireRole("admin"), asyncHandler(async (_req, res) => {
@@ -241,6 +255,17 @@ function registerRoutes(app) {
     store.audit(req.account, "key.copy_token", "key", key.id, { nodeId: key.nodeId, tokenName: key.tokenName }, req.ip);
     res.json({ token: key.token });
   }));
+  app.get("/api/admin/keys/:id/usage", requireRole("admin"), asyncHandler(async (req, res) => {
+    const key = store.getKey(req.params.id);
+    if (!key) {
+      throw httpError(404, "key not found");
+    }
+    const node = store.getNode(key.nodeId, { includeSecrets: true });
+    if (!node) {
+      throw httpError(404, "node not found");
+    }
+    res.json({ usage: await relay.tokenUsage(node, key.tokenName) });
+  }));
   app.post("/api/admin/keys", requireRole("admin"), asyncHandler(async (req, res) => {
     const result = await createKeyForAccount(req.body.accountId, req.body.nodeId);
     store.audit(req.account, "key.create_for_user", "key", result.key.id, { accountId: req.body.accountId, nodeId: req.body.nodeId }, req.ip);
@@ -271,6 +296,17 @@ function registerRoutes(app) {
     }
     store.audit(req.account, "key.copy_token", "key", key.id, { nodeId: key.nodeId, tokenName: key.tokenName }, req.ip);
     res.json({ token: key.token });
+  }));
+  app.get("/api/account/keys/:id/usage", requireRole("user"), asyncHandler(async (req, res) => {
+    const key = store.getKey(req.params.id);
+    if (!key || key.accountId !== req.account.id) {
+      throw httpError(404, "key not found");
+    }
+    const node = store.getNode(key.nodeId, { includeSecrets: true });
+    if (!node) {
+      throw httpError(404, "node not found");
+    }
+    res.json({ usage: await relay.tokenUsage(node, key.tokenName) });
   }));
   app.post("/api/account/keys", requireRole("user"), asyncHandler(async (req, res) => {
     const result = await createKeyForAccount(req.account.id, req.body.nodeId);
@@ -453,12 +489,13 @@ function stripNodeSecret(node) {
 }
 
 function summarizeOverview(items) {
-  const totals = { nodes: items.length, online: 0, tunnels: 0, streams: 0, traffic: 0 };
+  const totals = { nodes: items.length, online: 0, tunnels: 0, streams: 0, pending: 0, traffic: 0 };
   for (const item of items) {
     if (!item.online) continue;
     totals.online += 1;
     totals.tunnels += Number(item.status?.runtime?.activeTunnels || 0);
     totals.streams += Number(item.status?.runtime?.activeStreams || 0);
+    totals.pending += Number(item.status?.runtime?.pendingClients || 0);
     totals.traffic += Number(item.status?.runtime?.totalBytesToHost || 0) + Number(item.status?.runtime?.totalBytesToUser || 0);
   }
   return totals;

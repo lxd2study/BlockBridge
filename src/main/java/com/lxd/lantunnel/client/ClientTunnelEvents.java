@@ -49,11 +49,11 @@ public final class ClientTunnelEvents {
         }
 
         TunnelStatus status = LanTunnelManager.get().getStatus();
-        if (!status.connected()) {
+        if (!status.connected() && !status.running()) {
             return;
         }
 
-        drawLatency(event.getGuiGraphics(), minecraft.font, event.getWindow().getGuiScaledWidth(), status.latencyMillis());
+        drawLatency(event.getGuiGraphics(), minecraft.font, event.getWindow().getGuiScaledWidth(), status);
     }
 
     private static void applyOfflinePlayerMode(IntegratedServer server) {
@@ -63,8 +63,12 @@ public final class ClientTunnelEvents {
         }
     }
 
-    private static void drawLatency(GuiGraphics graphics, Font font, int screenWidth, long latencyMillis) {
-        String text = latencyMillis >= 0 ? "Relay: " + latencyMillis + " ms" : "Relay: -- ms";
+    private static void drawLatency(GuiGraphics graphics, Font font, int screenWidth, TunnelStatus status) {
+        long latencyMillis = status.latencyMillis();
+        String reason = status.diagnosticCode() == null ? "" : status.diagnosticCode();
+        String text = latencyMillis >= 0
+                ? "Relay: " + latencyMillis + " ms | " + status.activeConnections() + " conn"
+                : "Relay: -- ms | " + shortReason(reason);
         int width = font.width(text);
         int x = screenWidth - width - 6;
         int y = 6;
@@ -72,6 +76,16 @@ public final class ClientTunnelEvents {
 
         graphics.fill(x - 4, y - 3, screenWidth - 2, y + 10, 0x66000000);
         graphics.drawString(font, text, x, y, color, true);
+    }
+
+    private static String shortReason(String code) {
+        return switch (code) {
+            case "PING_TIMEOUT" -> "timeout";
+            case "DATA_FAILED" -> "data";
+            case "TOKEN_REJECTED" -> "token";
+            case "PORT_BIND_FAILED" -> "port";
+            default -> "sync";
+        };
     }
 
     private static int latencyColor(long latencyMillis) {
