@@ -6,6 +6,7 @@ import com.lxd.lantunnel.tunnel.LanTunnelClient;
 import com.lxd.lantunnel.tunnel.LanTunnelManager;
 import com.lxd.lantunnel.tunnel.TunnelStatus;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.components.EditBox;
@@ -22,6 +23,7 @@ public final class LanTunnelConfigScreen extends Screen {
     private static final int COMPACT_ROW_HEIGHT = 18;
     private static final int FIELD_COUNT = 6;
     private static final int OPTION_COUNT = 5;
+    private static final int SCROLL_STEP = 18;
     private static final int PANEL_COLOR = 0xB8000000;
     private static final int PANEL_BORDER = 0xAAFFFFFF;
     private static final int SECTION_COLOR = 0x66FFFFFF;
@@ -39,19 +41,32 @@ public final class LanTunnelConfigScreen extends Screen {
     private Checkbox showLatencyOverlayCheckbox;
     private Checkbox autoSelectNodeCheckbox;
     private Button startStopButton;
+    private Button testButton;
+    private Button copyAddressButton;
+    private Button saveButton;
+    private Button backButton;
     private int panelLeft;
     private int panelTop;
     private int panelWidth;
     private int fieldX;
     private int fieldWidth;
-    private int formY;
     private int rowHeight;
     private int fieldHeight;
-    private int checkboxY;
-    private int sectionY;
-    private int statusY;
     private int statusHeight;
     private int buttonY;
+    private int contentTop;
+    private int contentBottom;
+    private int contentHeight;
+    private int maxScroll;
+    private int scrollOffset;
+    private int checkboxStep;
+    private int checkboxBaseY;
+    private int sectionBaseY;
+    private int formBaseY;
+    private int statusBaseY;
+    private int scrollbarX;
+    private int footerHeight;
+    private boolean twoLineButtons;
     private boolean compactLayout;
     private Component message = Component.empty();
 
@@ -66,24 +81,24 @@ public final class LanTunnelConfigScreen extends Screen {
         LanTunnelConfig config = LanTunnelConfig.get().copy();
         computeLayout();
 
-        int y = checkboxY;
+        int y = checkboxBaseY;
 
         enabledCheckbox = addRenderableWidget(new Checkbox(panelLeft + 18, y, panelWidth - 36, 20,
                 Component.translatable("lan_tunnel.screen.enabled"), config.isEnabled()));
-        y += compactLayout ? 22 : 24;
+        y += checkboxStep;
         autoStartCheckbox = addRenderableWidget(new Checkbox(panelLeft + 18, y, panelWidth - 36, 20,
                 Component.translatable("lan_tunnel.screen.auto_start"), config.isAutoStart()));
-        y += compactLayout ? 21 : 24;
+        y += checkboxStep;
         allowOfflinePlayersCheckbox = addRenderableWidget(new Checkbox(panelLeft + 18, y, panelWidth - 36, 20,
                 Component.translatable("lan_tunnel.screen.allow_offline_players"), config.isAllowOfflinePlayers()));
-        y += compactLayout ? 19 : 24;
+        y += checkboxStep;
         showLatencyOverlayCheckbox = addRenderableWidget(new Checkbox(panelLeft + 18, y, panelWidth - 36, 20,
                 Component.translatable("lan_tunnel.screen.show_latency_overlay"), config.isShowLatencyOverlay()));
-        y += compactLayout ? 19 : 24;
+        y += checkboxStep;
         autoSelectNodeCheckbox = addRenderableWidget(new Checkbox(panelLeft + 18, y, panelWidth - 36, 20,
                 Component.translatable("lan_tunnel.screen.auto_select_node"), config.isAutoSelectNode()));
 
-        y = formY;
+        y = formBaseY;
         relayHostBox = addBox(fieldX, y, config.getRelayHost(), 128);
         y += rowHeight;
         controlPortBox = addPortBox(fieldX, y, config.getRelayControlPort());
@@ -96,63 +111,60 @@ public final class LanTunnelConfigScreen extends Screen {
         y += rowHeight;
         testTimeoutBox = addPortBox(fieldX, y, config.getConnectionTestTimeoutSeconds());
 
-        int gap = 8;
-        int buttonWidth = Math.max(48, (panelWidth - gap * 4) / 5);
         startStopButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
             if (LanTunnelManager.get().isRunning()) {
                 LanTunnelManager.get().stopManually();
             } else if (applyAndSave()) {
                 LanTunnelManager.get().startManually();
             }
-        }).bounds(panelLeft, buttonY, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("lan_tunnel.screen.test"), button -> testConnection())
-                .bounds(panelLeft + buttonWidth + gap, buttonY, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("lan_tunnel.screen.copy_address"), button -> copyShareAddress())
-                .bounds(panelLeft + (buttonWidth + gap) * 2, buttonY, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("lan_tunnel.screen.save"), button -> applyAndSave())
-                .bounds(panelLeft + (buttonWidth + gap) * 3, buttonY, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> onClose())
-                .bounds(panelLeft + (buttonWidth + gap) * 4, buttonY, buttonWidth, 20).build());
+        }).bounds(0, 0, 80, 20).build());
+        testButton = addRenderableWidget(Button.builder(Component.translatable("lan_tunnel.screen.test"), button -> testConnection())
+                .bounds(0, 0, 80, 20).build());
+        copyAddressButton = addRenderableWidget(Button.builder(Component.translatable("lan_tunnel.screen.copy_address"), button -> copyShareAddress())
+                .bounds(0, 0, 80, 20).build());
+        saveButton = addRenderableWidget(Button.builder(Component.translatable("lan_tunnel.screen.save"), button -> applyAndSave())
+                .bounds(0, 0, 80, 20).build());
+        backButton = addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> onClose())
+                .bounds(0, 0, 80, 20).build());
 
+        layoutButtons();
+        layoutWidgets();
         updateStartStopButton();
     }
 
     private void computeLayout() {
-        compactLayout = height < 460;
-        panelWidth = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, width - 48));
-        if (width < MIN_PANEL_WIDTH + 32) {
-            panelWidth = Math.max(300, width - 24);
-        }
+        compactLayout = height < 620;
+        panelWidth = Math.min(MAX_PANEL_WIDTH, Math.max(260, width - 48));
         panelLeft = (width - panelWidth) / 2;
         panelTop = compactLayout ? 8 : 24;
         rowHeight = compactLayout ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
         fieldHeight = compactLayout ? 18 : 20;
-        buttonY = height - (compactLayout ? 28 : 36);
-        checkboxY = panelTop + (compactLayout ? 18 : 38);
-        int optionStep = compactLayout ? 19 : 24;
-        int optionsBottom = checkboxY + 20 + (OPTION_COUNT - 1) * optionStep;
-        sectionY = optionsBottom + (compactLayout ? 8 : 14);
-        formY = sectionY + (compactLayout ? 12 : 22);
-        statusHeight = compactLayout ? 34 : 72;
+        checkboxStep = compactLayout ? 18 : 24;
+        statusHeight = compactLayout ? 44 : 72;
+        twoLineButtons = panelWidth < 430;
+        footerHeight = twoLineButtons ? 44 : 20;
+        int footerBottomPadding = compactLayout ? 8 : 16;
+        buttonY = height - footerBottomPadding - footerHeight;
+
+        contentTop = panelTop + (compactLayout ? 26 : 40);
+        contentBottom = buttonY - (compactLayout ? 8 : 12);
+
+        checkboxBaseY = contentTop + (compactLayout ? 2 : 6);
+        sectionBaseY = checkboxBaseY + 20 + (OPTION_COUNT - 1) * checkboxStep + (compactLayout ? 6 : 12);
+        formBaseY = sectionBaseY + (compactLayout ? 12 : 18);
+        statusBaseY = formBaseY + rowHeight * FIELD_COUNT + (compactLayout ? 8 : 14);
+
+        contentHeight = statusBaseY + statusHeight + (compactLayout ? 8 : 12) - contentTop;
+        int viewportHeight = Math.max(1, contentBottom - contentTop);
+        maxScroll = Math.max(0, contentHeight - viewportHeight);
+        scrollOffset = clamp(scrollOffset, 0, maxScroll);
+        scrollbarX = panelLeft + panelWidth - 10;
 
         fieldX = panelLeft + LABEL_WIDTH + 20;
-        fieldWidth = panelWidth - LABEL_WIDTH - 40;
+        fieldWidth = panelWidth - LABEL_WIDTH - 56;
         if (fieldWidth < 150) {
-            fieldX = panelLeft + 104;
-            fieldWidth = panelWidth - 124;
-        }
-
-        int preferredStatusY = buttonY - statusHeight - (compactLayout ? 8 : 24);
-        int latestStatusY = buttonY - statusHeight - (compactLayout ? 4 : 10);
-        int minStatusY = formY + rowHeight * FIELD_COUNT + (compactLayout ? 6 : 10);
-        if (latestStatusY >= minStatusY) {
-            statusY = Math.min(Math.max(preferredStatusY, minStatusY), latestStatusY);
-        } else {
-            int compactFormTop = optionsBottom + 4;
-            formY = Math.max(panelTop + (compactLayout ? compactFormTop - panelTop : 160),
-                    latestStatusY - rowHeight * FIELD_COUNT - (compactLayout ? 6 : 10));
-            minStatusY = formY + rowHeight * FIELD_COUNT + (compactLayout ? 6 : 10);
-            statusY = latestStatusY;
+            fieldX = panelLeft + 98;
+            fieldWidth = panelWidth - 132;
         }
     }
 
@@ -187,38 +199,52 @@ public final class LanTunnelConfigScreen extends Screen {
         drawPanel(graphics);
 
         int labelX = panelLeft + 18;
-        int y = formY;
-
         graphics.drawCenteredString(font, title, width / 2, panelTop + 12, 0xFFFFFF);
-        if (!compactLayout) {
-            graphics.drawString(font, Component.translatable("lan_tunnel.screen.section_connection"),
-                    labelX, sectionY, 0xD8D8D8);
-        }
-        drawLabel(graphics, "lan_tunnel.screen.relay_host", labelX, y);
-        y += rowHeight;
-        drawLabel(graphics, "lan_tunnel.screen.control_port", labelX, y);
-        y += rowHeight;
-        drawLabel(graphics, "lan_tunnel.screen.token", labelX, y);
-        y += rowHeight;
-        drawLabel(graphics, "lan_tunnel.screen.public_port", labelX, y);
-        y += rowHeight;
-        drawLabel(graphics, "lan_tunnel.screen.reconnect_delay", labelX, y);
-        y += rowHeight;
-        drawLabel(graphics, "lan_tunnel.screen.test_timeout", labelX, y);
+        layoutWidgets();
 
-        super.render(graphics, mouseX, mouseY, partialTick);
-        drawStatus(graphics);
+        graphics.enableScissor(panelLeft + 2, contentTop, panelLeft + panelWidth - 12, contentBottom);
+        try {
+            drawScrollableContent(graphics, labelX);
+            enabledCheckbox.render(graphics, mouseX, mouseY, partialTick);
+            autoStartCheckbox.render(graphics, mouseX, mouseY, partialTick);
+            allowOfflinePlayersCheckbox.render(graphics, mouseX, mouseY, partialTick);
+            showLatencyOverlayCheckbox.render(graphics, mouseX, mouseY, partialTick);
+            autoSelectNodeCheckbox.render(graphics, mouseX, mouseY, partialTick);
+            relayHostBox.render(graphics, mouseX, mouseY, partialTick);
+            controlPortBox.render(graphics, mouseX, mouseY, partialTick);
+            tokenBox.render(graphics, mouseX, mouseY, partialTick);
+            publicPortBox.render(graphics, mouseX, mouseY, partialTick);
+            reconnectDelayBox.render(graphics, mouseX, mouseY, partialTick);
+            testTimeoutBox.render(graphics, mouseX, mouseY, partialTick);
+        } finally {
+            graphics.disableScissor();
+        }
+
+        drawScrollbar(graphics);
+        drawFooterSeparator(graphics);
+        renderFixedButtons(graphics, mouseX, mouseY, partialTick);
     }
 
     private void drawPanel(GuiGraphics graphics) {
-        int panelBottom = Math.min(buttonY - 6, statusY + statusHeight + (compactLayout ? 4 : 10));
+        int panelBottom = Math.min(height - 4, buttonY + footerHeight + 4);
         graphics.fill(panelLeft - 12, panelTop, panelLeft + panelWidth + 12, panelBottom, PANEL_COLOR);
         graphics.renderOutline(panelLeft - 12, panelTop, panelWidth + 24, panelBottom - panelTop, PANEL_BORDER);
+    }
+
+    private void drawScrollableContent(GuiGraphics graphics, int labelX) {
         if (!compactLayout) {
-            graphics.fill(panelLeft + 12, sectionY - 6, panelLeft + panelWidth - 12, sectionY - 5, SECTION_COLOR);
+            graphics.drawString(font, Component.translatable("lan_tunnel.screen.section_connection"),
+                    labelX, sectionBaseY - scrollOffset, 0xD8D8D8);
+            graphics.fill(panelLeft + 12, sectionBaseY - scrollOffset - 6, panelLeft + panelWidth - 12,
+                    sectionBaseY - scrollOffset - 5, SECTION_COLOR);
         }
-        int statusLineY = statusY - (compactLayout ? 5 : 8);
-        graphics.fill(panelLeft + 12, statusLineY, panelLeft + panelWidth - 12, statusLineY + 1, SECTION_COLOR);
+        drawLabel(graphics, "lan_tunnel.screen.relay_host", labelX, formBaseY - scrollOffset);
+        drawLabel(graphics, "lan_tunnel.screen.control_port", labelX, formBaseY - scrollOffset + rowHeight);
+        drawLabel(graphics, "lan_tunnel.screen.token", labelX, formBaseY - scrollOffset + rowHeight * 2);
+        drawLabel(graphics, "lan_tunnel.screen.public_port", labelX, formBaseY - scrollOffset + rowHeight * 3);
+        drawLabel(graphics, "lan_tunnel.screen.reconnect_delay", labelX, formBaseY - scrollOffset + rowHeight * 4);
+        drawLabel(graphics, "lan_tunnel.screen.test_timeout", labelX, formBaseY - scrollOffset + rowHeight * 5);
+        drawStatus(graphics);
     }
 
     private void drawStatus(GuiGraphics graphics) {
@@ -228,6 +254,7 @@ public final class LanTunnelConfigScreen extends Screen {
         int statusWidth = statusRight - statusLeft;
         int lineHeight = compactLayout ? 11 : 14;
 
+        int statusY = statusBaseY - scrollOffset;
         int statusTop = statusY - (compactLayout ? 2 : 4);
         graphics.fill(statusLeft - 6, statusTop, statusRight + 6, statusY + statusHeight, 0x66000000);
         graphics.drawString(font, Component.translatable("lan_tunnel.screen.section_status"), statusLeft, statusY, 0xD8D8D8);
@@ -251,11 +278,36 @@ public final class LanTunnelConfigScreen extends Screen {
             graphics.drawString(font, Component.translatable("lan_tunnel.screen.share_address", "-"),
                     statusLeft, statusY + lineHeight * 2, 0x777777);
         }
-        if (!compactLayout && !status.diagnosticCode().isBlank() && !status.diagnosticCode().equals("CONNECTED")) {
+        if (!status.diagnosticCode().isBlank() && !status.diagnosticCode().equals("CONNECTED")) {
             graphics.drawString(font, Component.translatable("lan_tunnel.screen.diagnostic",
                     status.diagnosticCode(), status.consecutiveFailures()), statusLeft + Math.min(300, statusWidth / 2),
                     statusY + lineHeight * 3, 0xAAAAAA);
         }
+    }
+
+    private void drawScrollbar(GuiGraphics graphics) {
+        if (maxScroll <= 0) {
+            return;
+        }
+        int trackTop = contentTop + 2;
+        int trackBottom = contentBottom - 2;
+        int trackHeight = Math.max(1, trackBottom - trackTop);
+        int thumbHeight = Math.max(24, trackHeight * (contentBottom - contentTop) / Math.max(1, contentHeight));
+        int thumbTop = trackTop + (trackHeight - thumbHeight) * scrollOffset / Math.max(1, maxScroll);
+        graphics.fill(scrollbarX, trackTop, scrollbarX + 4, trackBottom, 0x44000000);
+        graphics.fill(scrollbarX, thumbTop, scrollbarX + 4, thumbTop + thumbHeight, 0x99FFFFFF);
+    }
+
+    private void drawFooterSeparator(GuiGraphics graphics) {
+        graphics.fill(panelLeft + 12, contentBottom + 3, panelLeft + panelWidth - 12, contentBottom + 4, SECTION_COLOR);
+    }
+
+    private void renderFixedButtons(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        startStopButton.render(graphics, mouseX, mouseY, partialTick);
+        testButton.render(graphics, mouseX, mouseY, partialTick);
+        copyAddressButton.render(graphics, mouseX, mouseY, partialTick);
+        saveButton.render(graphics, mouseX, mouseY, partialTick);
+        backButton.render(graphics, mouseX, mouseY, partialTick);
     }
 
     private void drawLabel(GuiGraphics graphics, String key, int x, int y) {
@@ -363,8 +415,101 @@ public final class LanTunnelConfigScreen extends Screen {
         }
     }
 
+    private void layoutButtons() {
+        int gap = 8;
+        if (twoLineButtons) {
+            int rowWidth = Math.max(56, (panelWidth - gap * 2) / 3);
+            startStopButton.setX(panelLeft);
+            startStopButton.setY(buttonY);
+            startStopButton.setWidth(rowWidth);
+            testButton.setX(panelLeft + rowWidth + gap);
+            testButton.setY(buttonY);
+            testButton.setWidth(rowWidth);
+            copyAddressButton.setX(panelLeft + (rowWidth + gap) * 2);
+            copyAddressButton.setY(buttonY);
+            copyAddressButton.setWidth(rowWidth);
+
+            int wideButtonWidth = Math.max(72, (panelWidth - gap) / 2);
+            saveButton.setX(panelLeft);
+            saveButton.setY(buttonY + 24);
+            saveButton.setWidth(wideButtonWidth);
+            backButton.setX(panelLeft + wideButtonWidth + gap);
+            backButton.setY(buttonY + 24);
+            backButton.setWidth(wideButtonWidth);
+            return;
+        }
+
+        int buttonWidth = Math.max(48, (panelWidth - gap * 4) / 5);
+        startStopButton.setX(panelLeft);
+        startStopButton.setY(buttonY);
+        startStopButton.setWidth(buttonWidth);
+        testButton.setX(panelLeft + buttonWidth + gap);
+        testButton.setY(buttonY);
+        testButton.setWidth(buttonWidth);
+        copyAddressButton.setX(panelLeft + (buttonWidth + gap) * 2);
+        copyAddressButton.setY(buttonY);
+        copyAddressButton.setWidth(buttonWidth);
+        saveButton.setX(panelLeft + (buttonWidth + gap) * 3);
+        saveButton.setY(buttonY);
+        saveButton.setWidth(buttonWidth);
+        backButton.setX(panelLeft + (buttonWidth + gap) * 4);
+        backButton.setY(buttonY);
+        backButton.setWidth(buttonWidth);
+    }
+
+    private void layoutWidgets() {
+        int checkboxY = checkboxBaseY - scrollOffset;
+        enabledCheckbox.setY(checkboxY);
+        autoStartCheckbox.setY(checkboxY + checkboxStep);
+        allowOfflinePlayersCheckbox.setY(checkboxY + checkboxStep * 2);
+        showLatencyOverlayCheckbox.setY(checkboxY + checkboxStep * 3);
+        autoSelectNodeCheckbox.setY(checkboxY + checkboxStep * 4);
+
+        relayHostBox.setY(formBaseY - scrollOffset);
+        controlPortBox.setY(formBaseY - scrollOffset + rowHeight);
+        tokenBox.setY(formBaseY - scrollOffset + rowHeight * 2);
+        publicPortBox.setY(formBaseY - scrollOffset + rowHeight * 3);
+        reconnectDelayBox.setY(formBaseY - scrollOffset + rowHeight * 4);
+        testTimeoutBox.setY(formBaseY - scrollOffset + rowHeight * 5);
+        updateContentWidgetVisibility();
+    }
+
+    private void updateContentWidgetVisibility() {
+        setContentWidgetVisibility(enabledCheckbox, 20);
+        setContentWidgetVisibility(autoStartCheckbox, 20);
+        setContentWidgetVisibility(allowOfflinePlayersCheckbox, 20);
+        setContentWidgetVisibility(showLatencyOverlayCheckbox, 20);
+        setContentWidgetVisibility(autoSelectNodeCheckbox, 20);
+        setContentWidgetVisibility(relayHostBox, fieldHeight);
+        setContentWidgetVisibility(controlPortBox, fieldHeight);
+        setContentWidgetVisibility(tokenBox, fieldHeight);
+        setContentWidgetVisibility(publicPortBox, fieldHeight);
+        setContentWidgetVisibility(reconnectDelayBox, fieldHeight);
+        setContentWidgetVisibility(testTimeoutBox, fieldHeight);
+    }
+
+    private void setContentWidgetVisibility(AbstractWidget widget, int widgetHeight) {
+        boolean visible = widget.getY() + widgetHeight > contentTop && widget.getY() < contentBottom;
+        widget.visible = visible;
+        widget.active = widget.getY() >= contentTop && widget.getY() + widgetHeight <= contentBottom;
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (maxScroll <= 0 || mouseX < panelLeft || mouseX > panelLeft + panelWidth || mouseY < contentTop || mouseY > contentBottom) {
+            return super.mouseScrolled(mouseX, mouseY, delta);
+        }
+        scrollOffset = clamp(scrollOffset - (int) Math.signum(delta) * SCROLL_STEP, 0, maxScroll);
+        layoutWidgets();
+        return true;
+    }
+
     @Override
     public void onClose() {
         minecraft.setScreen(parent);
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 }

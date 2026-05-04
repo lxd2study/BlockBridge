@@ -50,7 +50,9 @@ export class RelayClient {
       });
       const text = await response.text();
       if (!response.ok) {
-        throw new Error(text.trim() || response.statusText);
+        const error = new Error(text.trim() || response.statusText);
+        error.status = response.status;
+        throw error;
       }
       return text ? JSON.parse(text) : {};
     } finally {

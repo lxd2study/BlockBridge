@@ -2,6 +2,38 @@
 
 适用 Ubuntu 20.04/22.04/24.04 及更新版本。中转站不需要 Docker，部署后以 systemd 服务常驻运行。
 
+## 一键安装
+
+直接在 Ubuntu 服务器上执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-station/deploy/linux/one-click-install.sh | sudo bash
+```
+
+如果已经把 `relay-station` 目录上传到服务器，可直接执行：
+
+```bash
+cd relay-station
+sudo bash deploy/linux/one-click-install.sh
+```
+
+脚本会自动安装依赖和 Go 1.22、构建、安装 systemd、生成节点 API 密码和默认 Token，并启动服务。
+
+建议指定管理端服务器 IP，让脚本自动配置 UFW 仅允许管理端访问节点 API：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-station/deploy/linux/one-click-install.sh | sudo env MANAGER_IP=管理服务器公网IP OPEN_UFW=1 bash
+```
+
+常用参数：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-station/deploy/linux/one-click-install.sh | sudo env API_PORT=8080 CONTROL_PORT=25566 PUBLIC_MIN=25565 PUBLIC_MAX=25665 bash
+curl -fsSL https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-station/deploy/linux/one-click-install.sh | sudo env OVERWRITE_CONFIG=1 bash
+```
+
+安装完成后，终端会打印在 `relay-manager` 添加节点时要填写的 API 地址、账号、密码，以及 Mod 端访问令牌。
+
 ## 1. 安装基础工具
 
 ```bash

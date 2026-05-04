@@ -372,10 +372,20 @@ async function revokeKey(keyId, actor, ip) {
   }
   const node = store.getNode(key.nodeId, { includeSecrets: true });
   if (node) {
-    await relay.deleteToken(node, key.tokenName);
+    try {
+      await relay.deleteToken(node, key.tokenName);
+    } catch (error) {
+      if (!isMissingRemoteToken(error)) {
+        throw error;
+      }
+    }
   }
   store.revokeKey(key.id);
   store.audit(actor, "key.revoke", "key", key.id, { nodeId: key.nodeId, tokenName: key.tokenName }, ip);
+}
+
+function isMissingRemoteToken(error) {
+  return error?.status === 404 && /token not found/i.test(error.message || "");
 }
 
 function bulkNodes(input) {

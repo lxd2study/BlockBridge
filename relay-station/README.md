@@ -10,6 +10,35 @@ mod 端协议保持兼容，不需要改客户端 mod。
 
 节点侧不再内置 Web 页面。所有节点信息查看、令牌配置、隧道关闭、节点添加/删除，都在 `../relay-manager` 中统一完成。`relay-manager` 会通过每个节点的 `api.bind` 地址调用节点 API。
 
+## Linux 一键安装
+
+在 Linux 服务器上执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-station/deploy/linux/one-click-install.sh | sudo bash
+```
+
+如果已经把 `relay-station` 目录上传到服务器，也可以在目录内执行：
+
+```bash
+cd relay-station
+sudo bash deploy/linux/one-click-install.sh
+```
+
+脚本会自动安装基础依赖和 Go 1.22、构建二进制、生成强随机节点 API 密码和默认 Token、安装 systemd 服务并启动。完成后会打印 `relay-manager` 添加节点需要填写的 API 地址、账号、密码，以及 Minecraft Mod 需要填写的访问令牌。
+
+常用自定义参数：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-station/deploy/linux/one-click-install.sh | sudo env MANAGER_IP=管理服务器公网IP OPEN_UFW=1 bash
+```
+
+如果要覆盖已有配置重新生成密码和 Token：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-station/deploy/linux/one-click-install.sh | sudo env OVERWRITE_CONFIG=1 bash
+```
+
 ## 构建
 
 需要 Go 1.22 或更新版本。
