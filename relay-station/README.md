@@ -115,6 +115,7 @@ config/station.json
 - `maxConcurrentStreamsPerToken`：单个 Token 的最大实时玩家连接数。
 - `maxPendingClientsPerToken`：等待 Mod 建立数据连接的最大排队数。
 - `pendingClientTimeoutMillis`：公网玩家连接等待数据通道的超时时间。
+- `publicMin`/`publicMax`：公网玩家连接端口池；relay-station 会跳过已占用端口、控制端口和节点 API 端口。
 
 ## 运行
 

@@ -137,7 +137,7 @@ func (r *Relay) Snapshot() RelaySnapshot {
 	snapshot := RelaySnapshot{
 		StartedAt:        r.startedAt,
 		UptimeSeconds:    int64(now.Sub(r.startedAt).Seconds()),
-		PortPoolTotal:    cfg.Relay.PublicMax - cfg.Relay.PublicMin + 1,
+		PortPoolTotal:    availablePublicPortCount(cfg),
 		TotalPublic:      r.totalPublic.Load(),
 		TotalBytesToHost: r.totalToHost.Load(),
 		TotalBytesToUser: r.totalToUser.Load(),
@@ -288,10 +288,10 @@ func (r *Relay) handleHost(conn net.Conn, reader *bufio.Reader, parts []string) 
 		old.Close()
 		delete(r.tunnels, tokenText)
 	}
-	r.mu.Unlock()
 
-	publicLn, err := r.allocatePublicListener(requestedPort)
+	publicLn, err := r.allocatePublicListenerLocked(requestedPort)
 	if err != nil {
+		r.mu.Unlock()
 		_ = writeLine(conn, "ERR PORT_BIND_FAILED "+err.Error())
 		_ = conn.Close()
 		return
@@ -311,7 +311,6 @@ func (r *Relay) handleHost(conn net.Conn, reader *bufio.Reader, parts []string) 
 	tunnel.active.Store(true)
 	tunnel.touch()
 
-	r.mu.Lock()
 	r.tunnels[tokenText] = tunnel
 	r.mu.Unlock()
 
@@ -384,22 +383,74 @@ func (r *Relay) handleData(conn net.Conn, parts []string) {
 	tunnel.attachData(id, conn)
 }
 
-func (r *Relay) allocatePublicListener(requestedPort int) (net.Listener, error) {
+func (r *Relay) allocatePublicListenerLocked(requestedPort int) (net.Listener, error) {
 	cfg := r.store.Snapshot()
 	if requestedPort > 0 {
 		if requestedPort < cfg.Relay.PublicMin || requestedPort > cfg.Relay.PublicMax {
 			return nil, fmt.Errorf("requested port is outside the allowed range")
 		}
+		if reservedPublicPort(requestedPort, cfg) {
+			return nil, fmt.Errorf("requested port is reserved")
+		}
+		if r.publicPortInUseLocked(requestedPort) {
+			return nil, fmt.Errorf("requested port is already in use")
+		}
 		return net.Listen("tcp", net.JoinHostPort(cfg.Relay.Bind, strconv.Itoa(requestedPort)))
 	}
 
 	for port := cfg.Relay.PublicMin; port <= cfg.Relay.PublicMax; port++ {
+		if reservedPublicPort(port, cfg) || r.publicPortInUseLocked(port) {
+			continue
+		}
 		ln, err := net.Listen("tcp", net.JoinHostPort(cfg.Relay.Bind, strconv.Itoa(port)))
 		if err == nil {
 			return ln, nil
 		}
 	}
 	return nil, fmt.Errorf("no free public ports")
+}
+
+func (r *Relay) publicPortInUseLocked(port int) bool {
+	for _, tunnel := range r.tunnels {
+		if tunnel.active.Load() && tunnel.publicPort == port {
+			return true
+		}
+	}
+	return false
+}
+
+func reservedPublicPort(port int, cfg StationConfig) bool {
+	if port == cfg.Relay.ControlPort {
+		return true
+	}
+	return port == bindPort(cfg.API.Bind)
+}
+
+func bindPort(bind string) int {
+	_, portText, err := net.SplitHostPort(bind)
+	if err != nil {
+		index := strings.LastIndex(bind, ":")
+		if index < 0 || index == len(bind)-1 {
+			return 0
+		}
+		portText = bind[index+1:]
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		return 0
+	}
+	return port
+}
+
+func availablePublicPortCount(cfg StationConfig) int {
+	total := 0
+	for port := cfg.Relay.PublicMin; port <= cfg.Relay.PublicMax; port++ {
+		if reservedPublicPort(port, cfg) {
+			continue
+		}
+		total++
+	}
+	return total
 }
 
 func (t *Tunnel) acceptPublicClients() {

@@ -406,7 +406,7 @@ Minecraft Mod 默认连接：
   中转服务器地址: ${PUBLIC_HOST}
   控制端口: ${CONTROL_PORT}
   访问令牌: ${DEFAULT_TOKEN}
-  公网端口: 25565 或 0 自动分配
+  公网端口: 0 自动分配，或填写 ${PUBLIC_MIN}-${PUBLIC_MAX} 内未占用且非控制/API 的端口
 
 需要放行端口：
   TCP ${CONTROL_PORT}
