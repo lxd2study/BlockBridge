@@ -22,7 +22,7 @@
     <main v-if="page === 'home'" class="landing page-frame">
       <section class="hero-ops">
         <div class="hero-copy">
-          <h1>把本地世界接入可观测的中转网络</h1>
+          <h1>BlockBridge 中转控制台</h1>
           <div class="hero-actions">
             <button v-if="!me" type="button" class="primary" @click="go('/login')">进入控制台</button>
             <button v-else-if="me.role === 'admin'" type="button" class="primary" @click="go('/admin')">打开管理后台</button>
@@ -547,46 +547,61 @@
             </div>
           </div>
         </div>
+        <div class="account-stats">
+          <article><span>可用节点</span><strong>{{ accountNodes.length }}</strong></article>
+          <article><span>活跃 Key</span><strong>{{ accountKeys.length }}</strong></article>
+        </div>
       </section>
 
       <div class="account-grid">
-        <aside class="panel">
+        <form class="panel account-create" @submit.prevent="createAccountKey">
           <div class="panel-title">
             <h2>申请新隧道</h2>
           </div>
-          <div class="input-group">
-            <label>可用节点</label>
-            <select v-model="accountKeyForm.nodeId">
-              <option value="">请选择中转节点</option>
-              <option v-for="node in accountNodes" :key="node.id" :value="node.id">{{ node.name }} / {{ node.publicHost }}</option>
-            </select>
+          <div class="node-choice-list" role="radiogroup" aria-label="可用节点">
+            <label v-for="node in accountNodes" :key="node.id" class="node-choice" :class="{ selected: accountKeyForm.nodeId === node.id }">
+              <input v-model="accountKeyForm.nodeId" type="radio" :value="node.id" />
+              <span class="node-choice-meta">
+                <strong>{{ node.name }}</strong>
+                <code>{{ node.publicHost }}</code>
+              </span>
+              <span class="state on">{{ levelLabel(node.minUserLevel) }}</span>
+            </label>
+            <div v-if="!accountNodes.length" class="empty-state compact">暂无可用节点。</div>
           </div>
-          <button type="button" class="primary wide" @click="createAccountKey">申请 Key</button>
+          <div class="account-submit-row">
+            <span class="selection-count">已选 {{ accountKeyForm.nodeId ? 1 : 0 }}</span>
+            <button type="submit" class="primary" :disabled="!accountKeyForm.nodeId">申请 Key</button>
+          </div>
 
           <div v-if="createdToken" class="token-banner">
             <span>申请成功，请立即保存</span>
             <code @click="copyToken(createdToken)">{{ createdToken }}</code>
           </div>
-        </aside>
+        </form>
 
-        <section class="panel">
+        <section class="panel account-keys">
           <div class="panel-title">
             <h2>活跃隧道列表</h2>
             <span class="muted">{{ accountKeys.length }} 个 Key</span>
           </div>
-          <div class="key-card-grid">
-            <article v-for="key in accountKeys" :key="key.id" class="key-card">
-              <header>
-                <div>
-                  <strong>{{ key.nodeName }}</strong>
-                  <small>{{ key.publicHost }}</small>
-                </div>
-                <button class="danger ghost" type="button" @click="deleteAccountKey(key.id)">移除</button>
-              </header>
-              <p>{{ key.tokenName }}</p>
+          <div class="account-key-list">
+            <article v-for="key in accountKeys" :key="key.id" class="key-card account-key-row">
+              <div class="entity-cell">
+                <strong>{{ key.nodeName }}</strong>
+                <small>{{ key.publicHost }}</small>
+              </div>
+              <div class="entity-cell">
+                <small>Key</small>
+                <strong>{{ key.tokenName }}</strong>
+              </div>
               <code @click="copyStoredToken('account', key.id)">{{ key.tokenMasked }}</code>
+              <div class="actions">
+                <button type="button" @click="copyStoredToken('account', key.id)">复制</button>
+                <button class="danger" type="button" @click="deleteAccountKey(key.id)">移除</button>
+              </div>
             </article>
-            <div v-if="!accountKeys.length" class="empty-state">暂无活跃隧道。</div>
+            <div v-if="!accountKeys.length" class="empty-state compact">暂无活跃隧道。</div>
           </div>
         </section>
       </div>

@@ -27,10 +27,31 @@ sudo bash deploy/linux/one-click-install.sh
 
 脚本会自动安装基础依赖和 Go 1.22、构建二进制、生成强随机节点 API 密码和默认 Token、安装 systemd 服务并启动。完成后会打印 `relay-manager` 添加节点需要填写的 API 地址、账号、密码，以及 Minecraft Mod 需要填写的访问令牌。
 
+安装完成后会自动添加快捷命令：
+
+```bash
+bb-relay status      # 查看服务状态
+bb-relay logs        # 实时日志
+bb-relay tail 100    # 最近 100 行日志
+bb-relay restart     # 重启服务
+bb-relay config      # 编辑配置并重启
+bb-relay upgrade     # 升级到 main 最新版，保留配置
+bb-relay info        # 查看安装路径
+```
+
+`bb-relay upgrade` 会先备份 `/etc/lan-tunnel-relay-station/station.json`，再重新执行一键安装流程；默认不会覆盖现有配置。
+
 常用自定义参数：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-station/deploy/linux/one-click-install.sh | sudo env MANAGER_IP=管理服务器公网IP OPEN_UFW=1 bash
+```
+
+自定义快捷命令名称，或不安装快捷命令：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-station/deploy/linux/one-click-install.sh | sudo env SHORTCUT_NAME=bb-station bash
+curl -fsSL https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-station/deploy/linux/one-click-install.sh | sudo env INSTALL_SHORTCUT=0 bash
 ```
 
 如果要覆盖已有配置重新生成密码和 Token：

@@ -6,6 +6,8 @@ RUN_USER="${RUN_USER:-lan-tunnel}"
 APP_DIR="${APP_DIR:-/opt/lan-tunnel-relay-station}"
 CONFIG_DIR="${CONFIG_DIR:-/etc/lan-tunnel-relay-station}"
 SERVICE_FILE="${SERVICE_FILE:-/etc/systemd/system/${SERVICE_NAME}.service}"
+SHORTCUT_NAME="${SHORTCUT_NAME:-bb-relay}"
+SHORTCUT_FILE="${SHORTCUT_FILE:-/usr/local/bin/${SHORTCUT_NAME}}"
 
 API_USERNAME="${API_USERNAME:-node-api}"
 API_PORT="${API_PORT:-8080}"
@@ -21,11 +23,13 @@ PENDING_CLIENT_TIMEOUT_MILLIS="${PENDING_CLIENT_TIMEOUT_MILLIS:-15000}"
 OVERWRITE_CONFIG="${OVERWRITE_CONFIG:-0}"
 INSTALL_PACKAGES="${INSTALL_PACKAGES:-1}"
 START_SERVICE="${START_SERVICE:-1}"
+INSTALL_SHORTCUT="${INSTALL_SHORTCUT:-1}"
 OPEN_UFW="${OPEN_UFW:-0}"
 MANAGER_IP="${MANAGER_IP:-}"
 PUBLIC_HOST="${PUBLIC_HOST:-}"
 GO_INSTALL_VERSION="${GO_INSTALL_VERSION:-1.22.12}"
 REPO_ARCHIVE_URL="${REPO_ARCHIVE_URL:-https://github.com/lxd2study/BlockBridge/archive/refs/heads/main.tar.gz}"
+INSTALL_SCRIPT_URL="${INSTALL_SCRIPT_URL:-https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-station/deploy/linux/one-click-install.sh}"
 SOURCE_DIR="${SOURCE_DIR:-}"
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -227,6 +231,131 @@ if [ "$START_SERVICE" = "1" ]; then
   systemctl restart "$SERVICE_NAME"
 fi
 
+if [ "$INSTALL_SHORTCUT" = "1" ]; then
+  TMP_SHORTCUT="$(mktemp)"
+  SHORTCUT_BODY="$(cat <<'SHORTCUT'
+#!/usr/bin/env bash
+set -euo pipefail
+
+SERVICE_NAME="__SERVICE_NAME__"
+RUN_USER="__RUN_USER__"
+CONFIG_FILE="__CONFIG_FILE__"
+CONFIG_DIR="__CONFIG_DIR__"
+APP_DIR="__APP_DIR__"
+SERVICE_FILE="__SERVICE_FILE__"
+SHORTCUT_NAME="__SHORTCUT_NAME__"
+SHORTCUT_FILE="__SHORTCUT_FILE__"
+GO_INSTALL_VERSION="__GO_INSTALL_VERSION__"
+REPO_ARCHIVE_URL="__REPO_ARCHIVE_URL__"
+INSTALL_SCRIPT_URL="__INSTALL_SCRIPT_URL__"
+
+need_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+  else
+    echo "该操作需要 root 或 sudo：$*" >&2
+    exit 1
+  fi
+}
+
+print_help() {
+  cat <<HELP
+BlockBridge relay-station 快捷命令
+
+用法：
+  ${SHORTCUT_NAME} status        查看服务状态
+  ${SHORTCUT_NAME} logs          实时查看日志
+  ${SHORTCUT_NAME} tail [数量]   查看最近日志，默认 100 行
+  ${SHORTCUT_NAME} restart       重启服务
+  ${SHORTCUT_NAME} start         启动服务
+  ${SHORTCUT_NAME} stop          停止服务
+  ${SHORTCUT_NAME} config        编辑节点配置
+  ${SHORTCUT_NAME} upgrade       拉取 main 最新版并升级，保留现有配置
+  ${SHORTCUT_NAME} info          显示安装路径
+  ${SHORTCUT_NAME} help          显示帮助
+HELP
+}
+
+cmd="${1:-status}"
+case "$cmd" in
+  status)
+    systemctl status "$SERVICE_NAME" --no-pager
+    ;;
+  logs|log)
+    journalctl -u "$SERVICE_NAME" -f
+    ;;
+  tail)
+    count="${2:-100}"
+    case "$count" in
+      ""|*[!0-9]*) echo "tail 数量必须是数字。" >&2; exit 1 ;;
+    esac
+    journalctl -u "$SERVICE_NAME" -n "$count" --no-pager
+    ;;
+  restart|start|stop)
+    need_root systemctl "$cmd" "$SERVICE_NAME"
+    ;;
+  config)
+    if command -v nano >/dev/null 2>&1; then
+      need_root nano "$CONFIG_FILE"
+    else
+      need_root vi "$CONFIG_FILE"
+    fi
+    need_root systemctl restart "$SERVICE_NAME"
+    ;;
+  upgrade|update)
+    if ! command -v curl >/dev/null 2>&1; then
+      echo "缺少 curl，无法下载升级脚本。" >&2
+      exit 1
+    fi
+    if [ -f "$CONFIG_FILE" ]; then
+      backup="${CONFIG_FILE}.bak.$(date +%Y%m%d%H%M%S)"
+      need_root cp "$CONFIG_FILE" "$backup"
+      echo "已备份配置：$backup"
+    fi
+    if [ "$(id -u)" -eq 0 ]; then
+      curl -fsSL "$INSTALL_SCRIPT_URL" | env SERVICE_NAME="$SERVICE_NAME" RUN_USER="$RUN_USER" APP_DIR="$APP_DIR" CONFIG_DIR="$CONFIG_DIR" SERVICE_FILE="$SERVICE_FILE" SHORTCUT_NAME="$SHORTCUT_NAME" SHORTCUT_FILE="$SHORTCUT_FILE" GO_INSTALL_VERSION="$GO_INSTALL_VERSION" REPO_ARCHIVE_URL="$REPO_ARCHIVE_URL" INSTALL_SCRIPT_URL="$INSTALL_SCRIPT_URL" bash
+    else
+      curl -fsSL "$INSTALL_SCRIPT_URL" | sudo env SERVICE_NAME="$SERVICE_NAME" RUN_USER="$RUN_USER" APP_DIR="$APP_DIR" CONFIG_DIR="$CONFIG_DIR" SERVICE_FILE="$SERVICE_FILE" SHORTCUT_NAME="$SHORTCUT_NAME" SHORTCUT_FILE="$SHORTCUT_FILE" GO_INSTALL_VERSION="$GO_INSTALL_VERSION" REPO_ARCHIVE_URL="$REPO_ARCHIVE_URL" INSTALL_SCRIPT_URL="$INSTALL_SCRIPT_URL" bash
+    fi
+    ;;
+  info)
+    cat <<INFO
+服务名称：$SERVICE_NAME
+程序路径：$APP_DIR/relay-station
+配置文件：$CONFIG_FILE
+快捷命令：$(command -v "$SHORTCUT_NAME" 2>/dev/null || echo "$SHORTCUT_NAME")
+INFO
+    ;;
+  help|-h|--help)
+    print_help
+    ;;
+  *)
+    echo "未知命令：$cmd" >&2
+    print_help
+    exit 1
+    ;;
+esac
+SHORTCUT
+)"
+  SHORTCUT_BODY="${SHORTCUT_BODY//__SERVICE_NAME__/$SERVICE_NAME}"
+  SHORTCUT_BODY="${SHORTCUT_BODY//__RUN_USER__/$RUN_USER}"
+  SHORTCUT_BODY="${SHORTCUT_BODY//__CONFIG_FILE__/$CONFIG_FILE}"
+  SHORTCUT_BODY="${SHORTCUT_BODY//__CONFIG_DIR__/$CONFIG_DIR}"
+  SHORTCUT_BODY="${SHORTCUT_BODY//__APP_DIR__/$APP_DIR}"
+  SHORTCUT_BODY="${SHORTCUT_BODY//__SERVICE_FILE__/$SERVICE_FILE}"
+  SHORTCUT_BODY="${SHORTCUT_BODY//__SHORTCUT_NAME__/$SHORTCUT_NAME}"
+  SHORTCUT_BODY="${SHORTCUT_BODY//__SHORTCUT_FILE__/$SHORTCUT_FILE}"
+  SHORTCUT_BODY="${SHORTCUT_BODY//__GO_INSTALL_VERSION__/$GO_INSTALL_VERSION}"
+  SHORTCUT_BODY="${SHORTCUT_BODY//__REPO_ARCHIVE_URL__/$REPO_ARCHIVE_URL}"
+  SHORTCUT_BODY="${SHORTCUT_BODY//__INSTALL_SCRIPT_URL__/$INSTALL_SCRIPT_URL}"
+  printf '%s\n' "$SHORTCUT_BODY" > "$TMP_SHORTCUT"
+  install -d "$(dirname "$SHORTCUT_FILE")"
+  install -m 755 "$TMP_SHORTCUT" "$SHORTCUT_FILE"
+  rm -f "$TMP_SHORTCUT"
+fi
+
 if [ "$OPEN_UFW" = "1" ] && command -v ufw >/dev/null 2>&1; then
   ufw allow "${CONTROL_PORT}/tcp"
   ufw allow "${PUBLIC_MIN}:${PUBLIC_MAX}/tcp"
@@ -247,6 +376,17 @@ if [ -z "$PUBLIC_HOST" ]; then
   PUBLIC_HOST="节点公网IP"
 fi
 
+if [ "$INSTALL_SHORTCUT" = "1" ]; then
+  SHORTCUT_COMMANDS="$(cat <<EOF
+  ${SHORTCUT_NAME} status
+  ${SHORTCUT_NAME} logs
+  ${SHORTCUT_NAME} upgrade
+EOF
+)"
+else
+  SHORTCUT_COMMANDS="  未安装快捷命令。设置 INSTALL_SHORTCUT=1 可启用。"
+fi
+
 cat <<EOF
 
 relay-station 已安装完成。
@@ -254,6 +394,7 @@ relay-station 已安装完成。
 服务命令：
   systemctl status ${SERVICE_NAME}
   journalctl -u ${SERVICE_NAME} -f
+${SHORTCUT_COMMANDS}
 
 relay-manager 添加节点时填写：
   公网 Host: ${PUBLIC_HOST}

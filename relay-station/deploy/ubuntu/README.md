@@ -19,6 +19,20 @@ sudo bash deploy/linux/one-click-install.sh
 
 脚本会自动安装依赖和 Go 1.22、构建、安装 systemd、生成节点 API 密码和默认 Token，并启动服务。
 
+安装完成后可以直接使用快捷命令：
+
+```bash
+bb-relay status      # 查看服务状态
+bb-relay logs        # 实时日志
+bb-relay tail 100    # 最近 100 行日志
+bb-relay restart     # 重启服务
+bb-relay config      # 编辑配置并重启
+bb-relay upgrade     # 升级到 main 最新版，保留配置
+bb-relay info        # 查看安装路径
+```
+
+`bb-relay upgrade` 会先备份 `/etc/lan-tunnel-relay-station/station.json`，再重新执行一键安装流程；默认不会覆盖现有配置。
+
 建议指定管理端服务器 IP，让脚本自动配置 UFW 仅允许管理端访问节点 API：
 
 ```bash
@@ -30,6 +44,8 @@ curl -fsSL https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-st
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-station/deploy/linux/one-click-install.sh | sudo env API_PORT=8080 CONTROL_PORT=25566 PUBLIC_MIN=25565 PUBLIC_MAX=25665 bash
 curl -fsSL https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-station/deploy/linux/one-click-install.sh | sudo env OVERWRITE_CONFIG=1 bash
+curl -fsSL https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-station/deploy/linux/one-click-install.sh | sudo env SHORTCUT_NAME=bb-station bash
+curl -fsSL https://raw.githubusercontent.com/lxd2study/BlockBridge/main/relay-station/deploy/linux/one-click-install.sh | sudo env INSTALL_SHORTCUT=0 bash
 ```
 
 安装完成后，终端会打印在 `relay-manager` 添加节点时要填写的 API 地址、账号、密码，以及 Mod 端访问令牌。
